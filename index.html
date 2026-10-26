@@ -308,6 +308,14 @@ function draw() {
   if (azimuth >= 360) azimuth -= 360;
   elevation = targetEl;
 
+  // 임시 
+  let count = 0;
+STARS.forEach(star => {
+  const { alt, az } = raDecToAltAz(star.ra, star.dec, userLat, userLon);
+  if (alt > -10) count++;
+});
+document.getElementById('coords').textContent += ` · 별 ${count}개`;
+//임시 끝
   // 별 그리기
   STARS.forEach(star => {
     const { alt, az } = raDecToAltAz(star.ra, star.dec, userLat, userLon);
