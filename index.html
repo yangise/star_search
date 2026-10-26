@@ -83,6 +83,30 @@
     { x: 0.3, y: 0.6, r: 1, brightness: 0.6 },
     { x: 0.8, y: 0.15, r: 2.5, brightness: 0.9 },
   ];
+
+    // 6. 방위각 (카메라가 바라보는 방향)
+  let azimuth = 0;
+  let targetAz = 0;
+
+  function startSensor() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS 13+
+      DeviceOrientationEvent.requestPermission().then(res => {
+        if (res === 'granted') window.addEventListener('deviceorientation', onOrientation);
+      });
+    } else {
+      // Android + PC
+      window.addEventListener('deviceorientation', onOrientation);
+    }
+  }
+
+  function onOrientation(e) {
+    if (e.alpha !== null) targetAz = e.alpha;
+  }
+
+  startSensor();
+
    // 4. 별 하나를 그리는 함수
   function drawStar(x,y,r,brightness)
   {
@@ -99,8 +123,11 @@
   function draw()
   {
     ctx.clearRect(0,0,canvas.width,canvas.height);
+        // 방위각 부드럽게 따라가기 (lerp)
+    azimuth += (targetAz - azimuth) * 0.1;
     stars.forEach(star => {
-      const px = star.x * canvas.width;
+      const offset = (azimuth / 360) * canvas.width;
+const px = ((star.x * canvas.width) - offset + canvas.width) % canvas.width;
       const py = star.y * canvas.height;
       drawStar(px,py,star.r,star.brightness);
     });
