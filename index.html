@@ -201,8 +201,13 @@ function onOrientation(e) {
     targetAz = 360 - e.alpha;
   }
   if (e.beta !== null) {
-    targetEl = 90 - Math.max(0, Math.min(90, e.beta));
-  }
+  // beta 범위: 0(눕힘)~90(세움) 클램핑 후 elevation 계산
+  const beta = Math.max(0, Math.min(90, e.beta));
+  const newEl = 90 - beta;
+  // 급격한 변화 방지: 한 프레임에 10도 이상 안 바뀌게
+  const diff = newEl - targetEl;
+  targetEl += Math.max(-10, Math.min(10, diff));
+}
   const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
   document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
   document.getElementById('coords').textContent =
