@@ -76,15 +76,22 @@
   document.getElementById('startBtn').addEventListener('click', startSensor);
 
   function onOrientation(e) {
-    if (e.alpha !== null) targetAz = e.alpha;
-    if (e.beta !== null) {
-      targetEl = 90 - Math.max(0, Math.min(90, e.beta));
-    }
-    const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
-    document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
-    document.getElementById('coords').textContent =
-      `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
+  // iOS 사파리: webkitCompassHeading이 실제 나침반 방향
+  if (e.webkitCompassHeading !== undefined) {
+    targetAz = e.webkitCompassHeading;
+  } else if (e.alpha !== null) {
+    targetAz = 360 - e.alpha; // Android 보정
   }
+
+  if (e.beta !== null) {
+    targetEl = 90 - Math.max(0, Math.min(90, e.beta));
+  }
+
+  const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
+  document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
+  document.getElementById('coords').textContent =
+    `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
+}
 
   function drawStar(x, y, r, brightness) {
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r*3);
