@@ -5,77 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>별 어디있니</title>
   <style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000508; width: 100%; height: 100vh; overflow: hidden; }
+  #scope { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 2.5rem; }
+  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
+  #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
+  #coords { font-size: 0.75rem; opacity: 0.6; }
 
-  body {
-    background: #000508;
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  #scope {
+  #startBtn {
     position: fixed;
-    bottom: 30px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    font-size: 2.5rem;
-  }
-
-  #hud {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    color: rgba(180, 220, 255, 0.8);
+    transform: translate(-50%, -50%);
+    background: rgba(180,220,255,0.15);
+    color: rgba(180,220,255,0.9);
+    border: 1px solid rgba(180,220,255,0.4);
     font-family: monospace;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    font-size: 1rem;
+    padding: 14px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
   }
-
-  #dir {
-    font-size: 1.4rem;
-    font-weight: 300;
-    letter-spacing: 0.2em;
-  }
-
-  #coords {
-    font-size: 0.75rem;
-    opacity: 0.6;
-  }
-</style>
+  </style>
 </head>
 <body>
-
-  <!-- 하늘 캔버스 -->
   <canvas id="sky"></canvas>
-
-  <!-- 고정된 망원경 -->
   <div id="scope">🔭</div>
-
-  <!-- 상단 정보 -->
   <div id="hud">
     <span id="dir">N</span>
     <span id="coords">Az 0° · El 45°</span>
   </div>
+  <button id="startBtn">🔭 하늘 보기</button>
+
 <script>
-  // 1. 캔버스 준비
   const canvas = document.getElementById('sky');
   const ctx = canvas.getContext('2d');
 
-  // 2. 캔버스를 화면 크기에 맞추는 함수
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
   }
-
   resize();
   window.addEventListener('resize', resize);
-    // 3. 테스트용 별 데이터
+
   const stars = [
     { x: 0.2, y: 0.3, r: 2, brightness: 1.0 },
     { x: 0.5, y: 0.2, r: 1.5, brightness: 0.8 },
@@ -84,57 +57,52 @@
     { x: 0.8, y: 0.15, r: 2.5, brightness: 0.9 },
   ];
 
-    // 6. 방위각 (카메라가 바라보는 방향)
   let azimuth = 0;
   let targetAz = 0;
 
   function startSensor() {
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
-      // iOS 13+
       DeviceOrientationEvent.requestPermission().then(res => {
-        if (res === 'granted') window.addEventListener('deviceorientation', onOrientation);
+        if (res === 'granted') {
+          window.addEventListener('deviceorientation', onOrientation);
+          document.getElementById('startBtn').style.display = 'none';
+        }
       });
     } else {
-      // Android + PC
       window.addEventListener('deviceorientation', onOrientation);
+      document.getElementById('startBtn').style.display = 'none';
     }
   }
+
+  document.getElementById('startBtn').addEventListener('click', startSensor);
 
   function onOrientation(e) {
     if (e.alpha !== null) targetAz = e.alpha;
   }
 
-  startSensor();
-
-   // 4. 별 하나를 그리는 함수
-  function drawStar(x,y,r,brightness)
-  {
-    const grad = ctx. createRadialGradient(x,y,0,x,y,r*3);
-    grad.addColorStop(0,`rgba(255,255,255,${brightness})`);
+  function drawStar(x, y, r, brightness) {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r*3);
+    grad.addColorStop(0, `rgba(255,255,255,${brightness})`);
     grad.addColorStop(1, `rgba(255,255,255,0)`);
-
     ctx.beginPath();
-    ctx.arc(x,y,r*3,0,Math.PI *2);
+    ctx.arc(x, y, r*3, 0, Math.PI*2);
     ctx.fillStyle = grad;
     ctx.fill();
   }
-  // 5. 화면 전체를 그리는 함수
-  function draw()
-  {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-        // 방위각 부드럽게 따라가기 (lerp)
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     azimuth += (targetAz - azimuth) * 0.1;
     stars.forEach(star => {
       const offset = (azimuth / 360) * canvas.width;
-const px = ((star.x * canvas.width) - offset + canvas.width) % canvas.width;
+      const px = ((star.x * canvas.width) - offset + canvas.width) % canvas.width;
       const py = star.y * canvas.height;
-      drawStar(px,py,star.r,star.brightness);
+      drawStar(px, py, star.r, star.brightness);
     });
-    
     requestAnimationFrame(draw);
   }
-  
+
   draw();
 </script>
 </body>
