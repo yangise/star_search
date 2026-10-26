@@ -97,26 +97,32 @@
   }
 
   function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    azimuth = targetAz;
-    elevation = targetEl;
+  // 360도 경계 처리
+  let diff = targetAz - azimuth;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  azimuth += diff * 0.2;
+  if (azimuth < 0) azimuth += 360;
+  if (azimuth >= 360) azimuth -= 360;
 
-    stars.forEach(star => {
-      const offsetX = (azimuth / 360) * canvas.width;
-      const px = ((star.x * canvas.width) - offsetX + canvas.width) % canvas.width;
+  elevation = targetEl;
 
-      const offsetY = ((90 - elevation) / 90) * (canvas.height * 0.5);
-      const py = star.y * canvas.height + offsetY - canvas.height * 0.25;
+  stars.forEach(star => {
+    const offsetX = (azimuth / 360) * canvas.width;
+    const px = ((star.x * canvas.width) - offsetX + canvas.width) % canvas.width;
 
-      if (py < -20 || py > canvas.height + 20) return;
+    const offsetY = ((90 - elevation) / 90) * (canvas.height * 0.5);
+    const py = star.y * canvas.height + offsetY - canvas.height * 0.25;
 
-      drawStar(px, py, star.r, star.brightness);
-    });
+    if (py < -20 || py > canvas.height + 20) return;
 
-    requestAnimationFrame(draw);
-  }
+    drawStar(px, py, star.r, star.brightness);
+  });
 
+  requestAnimationFrame(draw);
+}
   draw();
 </script>
 </body>
