@@ -11,11 +11,9 @@
   #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
   #coords { font-size: 0.75rem; opacity: 0.6; }
-
   #startBtn {
     position: fixed;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     background: rgba(180,220,255,0.15);
     color: rgba(180,220,255,0.9);
@@ -57,8 +55,8 @@
     { x: 0.8, y: 0.15, r: 2.5, brightness: 0.9 },
   ];
 
-  let azimuth = 0;
-  let targetAz = 0;
+  let azimuth = 0, targetAz = 0;
+  let elevation = 45, targetEl = 45;
 
   function startSensor() {
     if (typeof DeviceOrientationEvent !== 'undefined' &&
@@ -79,6 +77,16 @@
 
   function onOrientation(e) {
     if (e.alpha !== null) targetAz = e.alpha;
+    if (e.beta !== null) {
+      // beta: 폰을 세우면 90도, 눕히면 0도
+      // 90도일 때 지평선(El=0), 0도일 때 천정(El=90)으로 매핑
+      targetEl = 90 - Math.max(0, Math.min(90, e.beta));
+    }
+    // HUD 업데이트
+    const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
+    document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
+    document.getElementById('coords').textContent = 
+      `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
   }
 
   function drawStar(x, y, r, brightness) {
@@ -93,13 +101,26 @@
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    azimuth += (targetAz - azimuth) * 0.1;
+
+    // 부드럽게 따라가기
+    azimuth += (targetAz - azimuth) * 0.15;
+    elevation += (targetEl - elevation) * 0.15;
+
     stars.forEach(star => {
-      const offset = (azimuth / 360) * canvas.width;
-      const px = ((star.x * canvas.width) - offset + canvas.width) % canvas.width;
-      const py = star.y * canvas.height;
+      // 좌우: azimuth 기준
+      const offsetX = (azimuth / 360) * canvas.width;
+      const px = ((star.x * canvas.width) - offsetX + canvas.width) % canvas.width;
+
+      // 상하: elevation 기준 (0°=지평선 아래, 90°=천정)
+      const offsetY = ((90 - elevation) / 90) * (canvas.height * 0.5);
+      const py = star.y * canvas.height + offsetY - canvas.height * 0.25;
+
+      // 화면 밖이면 안 그림
+      if (py < -20 || py > canvas.height + 20) return;
+
       drawStar(px, py, star.r, star.brightness);
     });
+
     requestAnimationFrame(draw);
   }
 
