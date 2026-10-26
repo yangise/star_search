@@ -78,14 +78,11 @@
   function onOrientation(e) {
     if (e.alpha !== null) targetAz = e.alpha;
     if (e.beta !== null) {
-      // beta: 폰을 세우면 90도, 눕히면 0도
-      // 90도일 때 지평선(El=0), 0도일 때 천정(El=90)으로 매핑
       targetEl = 90 - Math.max(0, Math.min(90, e.beta));
     }
-    // HUD 업데이트
     const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
     document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
-    document.getElementById('coords').textContent = 
+    document.getElementById('coords').textContent =
       `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
   }
 
@@ -102,20 +99,16 @@
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 부드럽게 따라가기
-    azimuth += (targetAz - azimuth) * 0.15;
-    elevation += (targetEl - elevation) * 0.15;
+    azimuth = targetAz;
+    elevation = targetEl;
 
     stars.forEach(star => {
-      // 좌우: azimuth 기준
       const offsetX = (azimuth / 360) * canvas.width;
       const px = ((star.x * canvas.width) - offsetX + canvas.width) % canvas.width;
 
-      // 상하: elevation 기준 (0°=지평선 아래, 90°=천정)
       const offsetY = ((90 - elevation) / 90) * (canvas.height * 0.5);
       const py = star.y * canvas.height + offsetY - canvas.height * 0.25;
 
-      // 화면 밖이면 안 그림
       if (py < -20 || py > canvas.height + 20) return;
 
       drawStar(px, py, star.r, star.brightness);
