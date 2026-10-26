@@ -37,99 +37,293 @@
   <button id="startBtn">🔭 하늘 보기</button>
 
 <script>
-  const canvas = document.getElementById('sky');
-  const ctx = canvas.getContext('2d');
+// =====================
+// 1. 캔버스 준비
+// =====================
+const canvas = document.getElementById('sky');
+const ctx = canvas.getContext('2d');
 
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// =====================
+// 2. 실제 별 데이터 (겉보기 등급 상위 100개, RA/Dec 단위: 도)
+// RA: 적경(0~360), Dec: 적위(-90~90), mag: 등급(작을수록 밝음)
+// =====================
+const STARS = [
+  { name: "시리우스",     ra: 101.287, dec: -16.716, mag: -1.46 },
+  { name: "카노푸스",     ra: 95.988,  dec: -52.696, mag: -0.74 },
+  { name: "아크투루스",   ra: 213.915, dec: 19.182,  mag: -0.05 },
+  { name: "리겔켄타우리", ra: 219.899, dec: -60.834, mag: -0.01 },
+  { name: "베가",         ra: 279.235, dec: 38.784,  mag: 0.03  },
+  { name: "카펠라",       ra: 79.172,  dec: 45.998,  mag: 0.08  },
+  { name: "리겔",         ra: 78.634,  dec: -8.202,  mag: 0.13  },
+  { name: "프로키온",     ra: 114.825, dec: 5.225,   mag: 0.34  },
+  { name: "아케르나르",   ra: 24.429,  dec: -57.237, mag: 0.46  },
+  { name: "베텔게우스",   ra: 88.793,  dec: 7.407,   mag: 0.50  },
+  { name: "하다르",       ra: 210.956, dec: -60.373, mag: 0.61  },
+  { name: "알타이르",     ra: 297.696, dec: 8.868,   mag: 0.77  },
+  { name: "알데바란",     ra: 68.980,  dec: 16.509,  mag: 0.85  },
+  { name: "아크룩스",     ra: 186.650, dec: -63.099, mag: 0.87  },
+  { name: "안타레스",     ra: 247.352, dec: -26.432, mag: 0.96  },
+  { name: "스피카",       ra: 201.298, dec: -11.161, mag: 0.98  },
+  { name: "폴룩스",       ra: 116.329, dec: 28.026,  mag: 1.14  },
+  { name: "포말하우트",   ra: 344.413, dec: -29.622, mag: 1.16  },
+  { name: "데네브",       ra: 310.358, dec: 45.280,  mag: 1.25  },
+  { name: "미모사",       ra: 191.930, dec: -59.689, mag: 1.25  },
+  { name: "레굴루스",     ra: 152.093, dec: 11.967,  mag: 1.35  },
+  { name: "아다라",       ra: 104.656, dec: -28.972, mag: 1.50  },
+  { name: "카스토르",     ra: 113.650, dec: 31.888,  mag: 1.57  },
+  { name: "가크룩스",     ra: 187.792, dec: -57.113, mag: 1.59  },
+  { name: "샤울라",       ra: 264.330, dec: -37.103, mag: 1.62  },
+  { name: "벨라트릭스",   ra: 81.283,  dec: 6.350,   mag: 1.64  },
+  { name: "엘나스",       ra: 81.573,  dec: 28.608,  mag: 1.65  },
+  { name: "알니탁",       ra: 85.190,  dec: -1.943,  mag: 1.74  },
+  { name: "알페라츠",     ra: 2.097,   dec: 29.091,  mag: 2.07  },
+  { name: "미르파크",     ra: 51.081,  dec: 49.861,  mag: 1.79  },
+  { name: "알리오스",     ra: 116.790, dec: -28.454, mag: 1.83  },
+  { name: "감마벨로룸",   ra: 122.383, dec: -47.337, mag: 1.83  },
+  { name: "알닐람",       ra: 84.053,  dec: -1.202,  mag: 1.69  },
+  { name: "레아",         ra: 139.273, dec: -59.275, mag: 1.86  },
+  { name: "알바이르",     ra: 305.557, dec: 40.257,  mag: 1.90  },
+  { name: "투반",         ra: 219.472, dec: 64.376,  mag: 3.67  },
+  { name: "아타비아",     ra: 68.499,  dec: -34.074, mag: 1.99  },
+  { name: "누누키",       ra: 15.346,  dec: -57.816, mag: 2.01  },
+  { name: "사빅",         ra: 258.044, dec: -15.725, mag: 2.43  },
+  { name: "카파벨로룸",   ra: 130.806, dec: -47.097, mag: 2.21  },
+  { name: "알파울프",     ra: 220.482, dec: -47.388, mag: 2.30  },
+  { name: "타우스코르",   ra: 252.541, dec: -28.216, mag: 2.82  },
+  { name: "헤드",         ra: 96.431,  dec: -17.956, mag: 2.23  },
+  { name: "카파오리",     ra: 73.563,  dec: -9.669,  mag: 2.06  },
+  { name: "앱실론카리나", ra: 125.629, dec: -59.510, mag: 1.86  },
+  { name: "알파그루",     ra: 332.058, dec: -46.961, mag: 1.73  },
+  { name: "알파트라이앵", ra: 24.498,  dec: 29.579,  mag: 3.99  },
+  { name: "엡실론오리",   ra: 76.964,  dec: -5.086,  mag: 1.70  },
+  { name: "알파파보",     ra: 306.412, dec: -56.735, mag: 1.94  },
+  { name: "알파인다이",   ra: 309.390, dec: -47.291, mag: 3.11  },
+  { name: "감마드라고",   ra: 269.152, dec: 51.489,  mag: 2.23  },
+  { name: "엡실론카리나2",ra: 139.273, dec: -59.275, mag: 1.86  },
+  { name: "카파스코르",   ra: 265.622, dec: -39.030, mag: 2.41  },
+  { name: "제타오피우",   ra: 249.290, dec: -10.567, mag: 2.56  },
+  { name: "람다스코르",   ra: 263.402, dec: -37.296, mag: 1.62  },
+  { name: "알파아리",     ra: 31.793,  dec: 23.463,  mag: 2.00  },
+  { name: "베타아우리",   ra: 89.882,  dec: 44.947,  mag: 1.90  },
+  { name: "알파케타이",   ra: 10.897,  dec: -17.987, mag: 2.04  },
+  { name: "감마사지타",   ra: 285.446, dec: -30.424, mag: 2.98  },
+  { name: "제타푸페",     ra: 120.896, dec: -40.003, mag: 2.21  },
+  { name: "알파오피우",   ra: 263.734, dec: 12.560,  mag: 2.07  },
+  { name: "베타케타이",   ra: 16.523,  dec: -17.541, mag: 2.02  },
+  { name: "알파코로나",   ra: 233.672, dec: 26.715,  mag: 2.23  },
+  { name: "감마벨로룸2",  ra: 116.340, dec: -28.135, mag: 1.98  },
+  { name: "베타그루",     ra: 340.667, dec: -46.885, mag: 2.07  },
+  { name: "베타카리나",   ra: 138.300, dec: -69.717, mag: 1.67  },
+  { name: "알파루피",     ra: 220.482, dec: -47.388, mag: 2.30  },
+  { name: "엡실론사지타", ra: 296.245, dec: -24.884, mag: 1.85  },
+  { name: "알파페르세이", ra: 51.081,  dec: 49.861,  mag: 1.79  },
+  { name: "베타아쿠일라", ra: 298.828, dec: 6.407,   mag: 3.71  },
+  { name: "감마레오니스", ra: 154.993, dec: 19.842,  mag: 1.98  },
+  { name: "감마카시오",   ra: 14.177,  dec: 60.717,  mag: 2.47  },
+  { name: "알파카시오",   ra: 10.127,  dec: 56.537,  mag: 2.24  },
+  { name: "베타카시오",   ra: 2.295,   dec: 59.150,  mag: 2.27  },
+  { name: "델타카시오",   ra: 21.454,  dec: 60.235,  mag: 2.68  },
+  { name: "엡실론카시오", ra: 28.599,  dec: 63.670,  mag: 3.38  },
+  { name: "알파우르사",   ra: 37.954,  dec: 89.264,  mag: 1.97  },
+  { name: "베타우르사",   ra: 165.460, dec: 56.383,  mag: 2.37  },
+  { name: "감마우르사",   ra: 176.513, dec: 53.695,  mag: 2.44  },
+  { name: "델타우르사",   ra: 183.857, dec: 57.033,  mag: 3.31  },
+  { name: "엡실론우르사", ra: 193.507, dec: 55.960,  mag: 1.77  },
+  { name: "제타우르사",   ra: 200.981, dec: 54.926,  mag: 2.27  },
+  { name: "에타우르사",   ra: 206.886, dec: 49.313,  mag: 1.86  },
+  { name: "알파보오티스", ra: 213.915, dec: 19.182,  mag: -0.05 },
+  { name: "베타레오니스", ra: 177.265, dec: 14.572,  mag: 2.14  },
+  { name: "알파히드라이", ra: 141.897, dec: -8.659,  mag: 1.98  },
+  { name: "베타오리오니", ra: 78.634,  dec: -8.202,  mag: 0.13  },
+  { name: "감마오리오니", ra: 81.283,  dec: 6.350,   mag: 1.64  },
+  { name: "델타오리오니", ra: 83.002,  dec: -0.299,  mag: 2.23  },
+  { name: "알파게미노룸", ra: 113.650, dec: 31.888,  mag: 1.57  },
+  { name: "베타게미노룸", ra: 116.329, dec: 28.026,  mag: 1.14  },
+  { name: "알파타우리",   ra: 68.980,  dec: 16.509,  mag: 0.85  },
+  { name: "베타타우리",   ra: 81.573,  dec: 28.608,  mag: 1.65  },
+  { name: "알파비르기니", ra: 201.298, dec: -11.161, mag: 0.98  },
+  { name: "베타비르기니", ra: 177.674, dec: 6.529,   mag: 3.61  },
+  { name: "알파아쿠일라", ra: 297.696, dec: 8.868,   mag: 0.77  },
+  { name: "알파리라이",   ra: 279.235, dec: 38.784,  mag: 0.03  },
+  { name: "알파시그니",   ra: 310.358, dec: 45.280,  mag: 1.25  },
+  { name: "알파피시스",   ra: 344.413, dec: -29.622, mag: 1.16  },
+];
+
+// =====================
+// 3. 센서 / GPS 상태
+// =====================
+let azimuth = 0, targetAz = 0;
+let elevation = 45, targetEl = 45;
+let userLat = 37.5665; // 기본값: 서울
+let userLon = 126.978;
+let gpsReady = false;
+
+// =====================
+// 4. 시작 버튼
+// =====================
+document.getElementById('startBtn').addEventListener('click', () => {
+  // GPS 요청
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      gpsReady = true;
+    },
+    () => { gpsReady = true; } // 실패해도 서울 기본값으로 진행
+  );
+
+  // 센서 요청
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(res => {
+      if (res === 'granted') {
+        window.addEventListener('deviceorientation', onOrientation);
+        document.getElementById('startBtn').style.display = 'none';
+      }
+    });
+  } else {
+    window.addEventListener('deviceorientation', onOrientation);
+    document.getElementById('startBtn').style.display = 'none';
   }
-  resize();
-  window.addEventListener('resize', resize);
+});
 
-  const stars = Array.from({ length: 100 }, () => ({
-  x: Math.random(),
-  y: Math.random(),
-  r: Math.random() * 2 + 0.5,
-  brightness: Math.random() * 0.6 + 0.4,
-}));
-
-  let azimuth = 0, targetAz = 0;
-  let elevation = 45, targetEl = 45;
-
-  function startSensor() {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission().then(res => {
-        if (res === 'granted') {
-          window.addEventListener('deviceorientation', onOrientation);
-          document.getElementById('startBtn').style.display = 'none';
-        }
-      });
-    } else {
-      window.addEventListener('deviceorientation', onOrientation);
-      document.getElementById('startBtn').style.display = 'none';
-    }
-  }
-
-  document.getElementById('startBtn').addEventListener('click', startSensor);
-
-  function onOrientation(e) {
-  // iOS 사파리: webkitCompassHeading이 실제 나침반 방향
+function onOrientation(e) {
   if (e.webkitCompassHeading !== undefined) {
     targetAz = e.webkitCompassHeading;
   } else if (e.alpha !== null) {
-    targetAz = 360 - e.alpha; // Android 보정
+    targetAz = 360 - e.alpha;
   }
-
   if (e.beta !== null) {
     targetEl = 90 - Math.max(0, Math.min(90, e.beta));
   }
-
   const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
   document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
   document.getElementById('coords').textContent =
     `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
 }
 
-  function drawStar(x, y, r, brightness) {
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r*3);
-    grad.addColorStop(0, `rgba(255,255,255,${brightness})`);
-    grad.addColorStop(1, `rgba(255,255,255,0)`);
-    ctx.beginPath();
-    ctx.arc(x, y, r*3, 0, Math.PI*2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
+// =====================
+// 5. 천체 좌표 계산 (RA/Dec → Alt/Az)
+// =====================
+function toRad(deg) { return deg * Math.PI / 180; }
+function toDeg(rad) { return rad * 180 / Math.PI; }
 
-  function draw() {
+function getJulianDate() {
+  return Date.now() / 86400000 + 2440587.5;
+}
+
+function raDecToAltAz(ra, dec, lat, lon) {
+  const jd = getJulianDate();
+  const T = (jd - 2451545.0) / 36525;
+
+  // 그리니치 항성시 (GMST)
+  let GMST = 280.46061837 + 360.98564736629 * (jd - 2451545.0)
+    + 0.000387933 * T * T - T * T * T / 38710000;
+  GMST = ((GMST % 360) + 360) % 360;
+
+  // 지방 항성시 (LMST)
+  const LMST = ((GMST + lon) % 360 + 360) % 360;
+
+  // 시각 (Hour Angle)
+  let HA = LMST - ra;
+  if (HA < 0) HA += 360;
+
+  const haRad = toRad(HA);
+  const decRad = toRad(dec);
+  const latRad = toRad(lat);
+
+  // 고도 (Altitude)
+  const sinAlt = Math.sin(decRad) * Math.sin(latRad)
+    + Math.cos(decRad) * Math.cos(latRad) * Math.cos(haRad);
+  const alt = toDeg(Math.asin(sinAlt));
+
+  // 방위각 (Azimuth)
+  const cosAz = (Math.sin(decRad) - Math.sin(toRad(alt)) * Math.sin(latRad))
+    / (Math.cos(toRad(alt)) * Math.cos(latRad));
+  let az = toDeg(Math.acos(Math.max(-1, Math.min(1, cosAz))));
+  if (Math.sin(haRad) > 0) az = 360 - az;
+
+  return { alt, az };
+}
+
+// =====================
+// 6. 화면 좌표 계산
+// =====================
+function celestialToScreen(objAz, objAlt, camAz, camEl) {
+  // 방위각 차이
+  let dAz = objAz - camAz;
+  if (dAz > 180) dAz -= 360;
+  if (dAz < -180) dAz += 360;
+
+  // 고도 차이
+  const dEl = objAlt - camEl;
+
+  // 시야각: 좌우 60도, 상하 60도
+  const fovH = 60;
+  const fovV = 60;
+
+  const px = canvas.width / 2 + (dAz / fovH) * canvas.width;
+  const py = canvas.height / 2 - (dEl / fovV) * canvas.height;
+
+  return { px, py };
+}
+
+// =====================
+// 7. 그리기 함수들
+// =====================
+function drawStar(x, y, r, brightness, color = '255,255,255') {
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+  grad.addColorStop(0, `rgba(${color},${brightness})`);
+  grad.addColorStop(1, `rgba(${color},0)`);
+  ctx.beginPath();
+  ctx.arc(x, y, r * 3, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+// =====================
+// 8. 메인 루프
+// =====================
+function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 360도 경계 처리
+  // 방위각 경계 처리
   let diff = targetAz - azimuth;
   if (diff > 180) diff -= 360;
   if (diff < -180) diff += 360;
   azimuth += diff * 0.2;
   if (azimuth < 0) azimuth += 360;
   if (azimuth >= 360) azimuth -= 360;
-
   elevation = targetEl;
 
-  stars.forEach(star => {
-    const offsetX = (azimuth / 360) * canvas.width;
-    const px = ((star.x * canvas.width) - offsetX + canvas.width) % canvas.width;
+  // 별 그리기
+  STARS.forEach(star => {
+    const { alt, az } = raDecToAltAz(star.ra, star.dec, userLat, userLon);
+    if (alt < -10) return; // 지평선 아래 10도 이상은 생략
 
-    const offsetY = ((90 - elevation) / 90) * (canvas.height * 0.5);
-    const py = star.y * canvas.height + offsetY - canvas.height * 0.25;
+    const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
 
-    if (py < -20 || py > canvas.height + 20) return;
+    // 화면 밖이면 생략
+    if (px < -20 || px > canvas.width + 20 || py < -20 || py > canvas.height + 20) return;
 
-    drawStar(px, py, star.r, star.brightness);
+    // 등급 → 크기/밝기 변환 (mag 작을수록 밝음)
+    const r = Math.max(0.5, 2.5 - star.mag * 0.5);
+    const brightness = Math.max(0.3, 1.0 - star.mag * 0.1);
+
+    drawStar(px, py, r, brightness);
   });
 
   requestAnimationFrame(draw);
 }
-  draw();
+
+draw();
 </script>
 </body>
 </html>
