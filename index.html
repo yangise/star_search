@@ -224,6 +224,33 @@ function getJulianDate() {
   return Date.now() / 86400000 + 2440587.5;
 }
 
+function getMoonPosition(lat, lon) {
+  const jd = getJulianDate();
+  const n = jd - 2451545.0;
+  const L = (218.316 + 13.176396 * n) % 360;
+  const M = toRad((134.963 + 13.064993 * n) % 360);
+  const F = toRad((93.272 + 13.229350 * n) % 360);
+  const lambda = toRad(L + 6.289 * Math.sin(M));
+  const beta = toRad(5.128 * Math.sin(F));
+  const epsilon = toRad(23.439 - 0.0000004 * n);
+  const ra = toDeg(Math.atan2(
+    Math.cos(epsilon) * Math.sin(lambda) - Math.tan(beta) * Math.sin(epsilon),
+    Math.cos(lambda)
+  ));
+  const dec = toDeg(Math.asin(
+    Math.sin(beta) * Math.cos(epsilon) +
+    Math.cos(beta) * Math.sin(epsilon) * Math.sin(lambda)
+  ));
+  return raDecToAltAz((ra + 360) % 360, dec, lat, lon);
+}
+
+function getMoonPhase() {
+  const jd = getJulianDate();
+  const n = jd - 2451545.0;
+  const phase = ((n % 29.53059) + 29.53059) % 29.53059;
+  return phase;
+}
+
 function raDecToAltAz(ra, dec, lat, lon) {
   const jd = getJulianDate();
   const T = (jd - 2451545.0) / 36525;
@@ -325,7 +352,38 @@ function draw() {
 
     drawStar(px, py, r, brightness);
   });
+  //달 그리기
+  const moon = getMoonPosition(userLat, userLon);
+if (moon.alt > -10) {
+  const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
+  if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
+    const phase = getMoonPhase();
+    const r = 15;
 
+    const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, 40);
+    glowGrad.addColorStop(0, 'rgba(200,220,255,0.2)');
+    glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
+    ctx.beginPath();
+    ctx.arc(px, py, 40, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(220,230,255,0.95)';
+    ctx.fill();
+
+    const illumination = phase / 29.53059;
+    const shadowX = px + (illumination < 0.5 ? 1 : -1) * r * Math.cos(Math.PI * illumination * 2);
+
+    ctx.beginPath();
+    ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, illumination > 0.5);
+    ctx.arc(shadowX, py, r * Math.abs(Math.cos(Math.PI * illumination * 2)),
+      Math.PI / 2, -Math.PI / 2, illumination < 0.5);
+    ctx.fillStyle = '#000508';
+    ctx.fill();
+  }
+}
   requestAnimationFrame(draw);
 }
 
