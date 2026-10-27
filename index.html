@@ -210,8 +210,11 @@ function onOrientation(e) {
 }
   const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
   document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
-  document.getElementById('coords').textContent =
-    `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
+  // document.getElementById('coords').textContent =
+  //   `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
+    const moon = getMoonPosition(userLat, userLon);
+    document.getElementById('coords').textContent =
+    `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}° | 달 Az${Math.round(moon.az)}° El${Math.round(moon.alt)}°`;
 }
 
 // =====================
