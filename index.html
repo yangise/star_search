@@ -251,9 +251,12 @@ function getMoonPosition(lat, lon) {
 
 function getMoonPhase() {
   const jd = getJulianDate();
-  const n = jd - 2451545.0;
-  const phase = ((n % 29.53059) + 29.53059) % 29.53059;
-  return phase;
+  // 2026년 10월 26일 보름달 기준 JD 계산
+  const knownFullMoon = 2461319.0; // 2026-10-26 12:11 UTC
+  const daysSince = jd - knownFullMoon;
+  const phase = ((daysSince % 29.53059) + 29.53059) % 29.53059;
+  // 보름달 기준이므로 절반 주기 더함 (신월 기준으로 변환)
+  return (phase + 14.765) % 29.53059;
 }
 
 function raDecToAltAz(ra, dec, lat, lon) {
