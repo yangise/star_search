@@ -42,6 +42,8 @@
 // =====================
 const canvas = document.getElementById('sky');
 const ctx = canvas.getContext('2d');
+const moonImg = new Image();
+moonImg.src = 'moon.jpg';
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -357,53 +359,44 @@ function draw() {
   });
   
     // 달 그리기
-  const moon = getMoonPosition(userLat, userLon);
-  if (moon.alt > -10) {
-    const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
-    if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
-      const phase = getMoonPhase();
-      const r = 50;
-      const illumination = phase / 29.53059; // 0=신월, 0.5=보름달, 1=신월
+ // 달 그리기
+const moon = getMoonPosition(userLat, userLon);
+if (moon.alt > -10) {
+  const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
+  if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
+    const phase = getMoonPhase();
+    const r = 50;
+    const illumination = phase / 29.53059;
 
-      // 빛번짐
-      const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r + 30);
-      glowGrad.addColorStop(0, 'rgba(200,220,255,0.15)');
-      glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
-      ctx.beginPath();
-      ctx.arc(px, py, r + 30, 0, Math.PI * 2);
-      ctx.fillStyle = glowGrad;
-      ctx.fill();
+    // 빛번짐
+    const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r + 40);
+    glowGrad.addColorStop(0, 'rgba(200,220,255,0.15)');
+    glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
+    ctx.beginPath();
+    ctx.arc(px, py, r + 40, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
 
-      // 달 전체 어두운 배경 (그믐 부분)
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(30,35,50,0.95)';
-      ctx.fill();
+    // 달 이미지를 원형으로 clip해서 그리기
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(moonImg, px - r, py - r, r * 2, r * 2);
 
-      // 밝은 부분 — clip으로 반원만 그리기
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.clip();
+    // 위상 그림자 오버레이
+    const lit = illumination <= 0.5 ? illumination * 2 : (1 - illumination) * 2;
+    const shadowDir = illumination <= 0.5 ? 1 : -1;
 
-      // 밝은 반쪽
-      const lightSide = illumination <= 0.5 ? -1 : 1;
-      ctx.beginPath();
-      ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, lightSide < 0);
-      ctx.fillStyle = 'rgba(220,230,255,0.95)';
-      ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, illumination > 0.5);
+    ctx.ellipse(px, py, r * (1 - lit), r, 0, -Math.PI / 2, Math.PI / 2, illumination > 0.5);
+    ctx.fillStyle = 'rgba(0,3,8,0.92)';
+    ctx.fill();
 
-      // 위상에 따른 타원형 경계
-      const scaleX = Math.abs(Math.cos(Math.PI * 2 * illumination));
-      ctx.beginPath();
-      ctx.ellipse(px, py, r * scaleX, r, 0, 0, Math.PI * 2);
-      ctx.fillStyle = illumination < 0.25 || illumination > 0.75
-        ? 'rgba(220,230,255,0.95)'
-        : 'rgba(30,35,50,0.95)';
-      ctx.fill();
+    ctx.restore();
+  }
 
-      ctx.restore();
-    }
   }
   requestAnimationFrame(draw);
 }
