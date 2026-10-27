@@ -251,12 +251,12 @@ function getMoonPosition(lat, lon) {
 
 function getMoonPhase() {
   const jd = getJulianDate();
-  // 2026년 10월 26일 보름달 기준 JD 계산
-  const knownFullMoon = 2461319.0; // 2026-10-26 12:11 UTC
+  // 기준: 2026년 10월 26일 보름달 JD 2461319.0
+  const knownFullMoon = 2461319.0;
   const daysSince = jd - knownFullMoon;
-  const phase = ((daysSince % 29.53059) + 29.53059) % 29.53059;
-  // 보름달 기준이므로 절반 주기 더함 (신월 기준으로 변환)
-  return (phase + 14.765) % 29.53059;
+  const cycle = ((daysSince % 29.53059) + 29.53059) % 29.53059;
+  // 보름달 기준이므로 반주기 더해서 신월 기준으로 변환
+  return (cycle + 14.765) % 29.53059;
 }
 
 function raDecToAltAz(ra, dec, lat, lon) {
@@ -393,7 +393,7 @@ if (moon.alt > -10) {
 
     ctx.beginPath();
     ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, illumination > 0.5);
-    ctx.ellipse(px, py, r * (1 - lit), r, 0, -Math.PI / 2, Math.PI / 2, illumination > 0.5);
+    ctx.ellipse(px, py, r * Math.abs(1 - 2 * (illumination <= 0.5 ? illumination : 1 - illumination)), r, 0, -Math.PI / 2, Math.PI / 2, illumination <= 0.5);
     ctx.fillStyle = 'rgba(0,3,8,0.92)';
     ctx.fill();
 
