@@ -212,8 +212,6 @@ function onOrientation(e) {
 }
   const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
   document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
-  // document.getElementById('coords').textContent =
-  //   `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}°`;
     const moon = getMoonPosition(userLat, userLon);
     document.getElementById('coords').textContent =
     `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}° | 달 Az${Math.round(moon.az)}° El${Math.round(moon.alt)}°`;
@@ -249,14 +247,18 @@ function getMoonPosition(lat, lon) {
   return raDecToAltAz((ra + 360) % 360, dec, lat, lon);
 }
 
+// 달 위상 계산 (정확한 신월 기준점 사용)
+// 기준: 2000년 1월 6일 18:14 UTC = JD 2451549.26 (알려진 신월)
 function getMoonPhase() {
   const jd = getJulianDate();
-  // 기준: 2026년 10월 26일 보름달 JD 2461319.0
-  const knownFullMoon = 2461319.0;
-  const daysSince = jd - knownFullMoon;
+  const knownNewMoon = 2451549.26;
+  const daysSince = jd - knownNewMoon;
   const cycle = ((daysSince % 29.53059) + 29.53059) % 29.53059;
-  // 보름달 기준이므로 반주기 더해서 신월 기준으로 변환
-  return (cycle + 14.765) % 29.53059;
+  // 코사인 공식으로 정확한 조도 계산 (0=신월, 0.5=보름달 전, 1.0=보름달, ...)
+  const illumination = (1 - Math.cos(2 * Math.PI * cycle / 29.53059)) / 2;
+  // cycle이 14.765 이상이면 보름달 지나서 하현달 방향 (오른쪽에 그림자)
+  const waning = cycle > 14.765;
+  return { illumination, waning, cycle };
 }
 
 function raDecToAltAz(ra, dec, lat, lon) {
@@ -343,7 +345,7 @@ function draw() {
   if (azimuth >= 360) azimuth -= 360;
   elevation = targetEl;
 
-  
+
   // 별 그리기
   STARS.forEach(star => {
     const { alt, az } = raDecToAltAz(star.ra, star.dec, userLat, userLon);
@@ -360,47 +362,66 @@ function draw() {
 
     drawStar(px, py, r, brightness);
   });
-  
-    // 달 그리기
- // 달 그리기
-const moon = getMoonPosition(userLat, userLon);
-if (moon.alt > -10) {
-  const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
-  if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
-    const phase = getMoonPhase();
-    const r = 50;
-    const illumination = phase / 29.53059;
 
-    // 빛번짐
-    const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r + 40);
-    glowGrad.addColorStop(0, 'rgba(200,220,255,0.15)');
-    glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
-    ctx.beginPath();
-    ctx.arc(px, py, r + 40, 0, Math.PI * 2);
-    ctx.fillStyle = glowGrad;
-    ctx.fill();
+  // 달 그리기
+  const moon = getMoonPosition(userLat, userLon);
+  if (moon.alt > -10) {
+    const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
+    if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
+      const { illumination, waning } = getMoonPhase();
+      const r = 50;
 
-    // 달 이미지를 원형으로 clip해서 그리기
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(moonImg, px - r, py - r, r * 2, r * 2);
+      // 빛번짐
+      const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r + 40);
+      glowGrad.addColorStop(0, 'rgba(200,220,255,0.15)');
+      glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
+      ctx.beginPath();
+      ctx.arc(px, py, r + 40, 0, Math.PI * 2);
+      ctx.fillStyle = glowGrad;
+      ctx.fill();
 
-    // 위상 그림자 오버레이
-    const lit = illumination <= 0.5 ? illumination * 2 : (1 - illumination) * 2;
-    const shadowDir = illumination <= 0.5 ? 1 : -1;
+      // 달 이미지를 원형으로 clip해서 그리기
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(moonImg, px - r, py - r, r * 2, r * 2);
 
-    ctx.beginPath();
-    ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, illumination > 0.5);
-    ctx.ellipse(px, py, r * Math.abs(1 - 2 * (illumination <= 0.5 ? illumination : 1 - illumination)), r, 0, -Math.PI / 2, Math.PI / 2, illumination <= 0.5);
-    ctx.fillStyle = 'rgba(0,3,8,0.92)';
-    ctx.fill();
+      // 위상 그림자 오버레이
+      // illumination: 0=신월(완전어둠), 1=보름달(완전밝음)
+      // waning: true면 하현달(오른쪽에 그림자), false면 상현달(왼쪽에 그림자)
+      const darkFraction = 1 - illumination; // 어두운 부분 비율
 
-    ctx.restore();
+      // 그림자가 덮는 x 폭: ellipse의 x 반지름
+      // darkFraction=0이면 그림자 없음, darkFraction=0.5이면 반원, darkFraction=1이면 전체
+      const shadowX = r * Math.abs(1 - 2 * Math.min(darkFraction, 0.5) / 0.5 * 0.5);
+      // 더 간단하고 정확한 계산:
+      // 신월→상현: 왼쪽 반원 그림자 + 오른쪽으로 줄어드는 타원
+      // 보름달→하현: 오른쪽 반원 그림자 + 왼쪽으로 줄어드는 타원
+
+      ctx.beginPath();
+      if (!waning) {
+        // 상현달 (초승달→반달→보름달 직전): 왼쪽이 어두움
+        // 어두운 쪽: 왼쪽 반원
+        ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, false); // 왼쪽 반원
+        // 타원으로 닫기: illumination이 0에 가까울수록 타원이 오른쪽까지 커짐
+        const ex = r * (1 - 2 * illumination); // illumination=0→r, illumination=0.5→0, illumination=1→-r
+        ctx.ellipse(px, py, Math.abs(ex), r, 0, -Math.PI / 2, Math.PI / 2, ex > 0);
+      } else {
+        // 하현달 (보름달 직후→반달→그믐달): 오른쪽이 어두움
+        // 어두운 쪽: 오른쪽 반원
+        ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, false); // 오른쪽 반원
+        // 타원으로 닫기: illumination이 1에 가까울수록 타원이 왼쪽까지 커짐
+        const ex = r * (2 * illumination - 1); // illumination=1→r, illumination=0.5→0, illumination=0→-r
+        ctx.ellipse(px, py, Math.abs(ex), r, 0, Math.PI / 2, -Math.PI / 2, ex > 0);
+      }
+      ctx.fillStyle = 'rgba(0,3,8,0.95)';
+      ctx.fill();
+
+      ctx.restore();
+    }
   }
 
-  }
   requestAnimationFrame(draw);
 }
 
