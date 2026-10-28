@@ -548,7 +548,7 @@ function draw() {
 
     drawStar(px, py, r, brightness);
   });
-  
+
     // 행성 그리기
   const PLANET_STYLE = [
     { key: 'venus', label: '금성', r: 6, color: '#fff2b0', glow: '255,240,170' },
@@ -556,6 +556,9 @@ function draw() {
   ];
   PLANET_STYLE.forEach(pl => {
     const pos = getPlanetPosition(pl.key, userLat, userLon);
+    
+    pos.alt = 70; pos.az = 90; // 임시
+
     if (pos.alt < -10) return;
     const { px, py } = celestialToScreen(pos.az, pos.alt, azimuth, elevation);
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
@@ -564,7 +567,7 @@ function draw() {
 
     // 태양 그리기
   const sun = getSunPosition(userLat, userLon);
-  sun.alt = 60; sun.az = 90;
+  sun.alt = 60; sun.az = 90;//임시
   if (sun.alt > -10) {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
@@ -574,7 +577,7 @@ function draw() {
 
   // 달 그리기
   const moon = getMoonPosition(userLat, userLon);
-   moon.alt = 40; moon.az = 90;
+   moon.alt = 40; moon.az = 90;//ㅇ;ㅁㅅ;
   if (moon.alt > -10) {
     const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
     if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
