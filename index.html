@@ -11,6 +11,16 @@
   #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
   #coords { font-size: 0.75rem; opacity: 0.6; }
+  #info {
+    margin-top: 8px; padding: 8px 12px;
+    background: rgba(180,220,255,0.08);
+    border: 1px solid rgba(180,220,255,0.25);
+    border-radius: 8px;
+    display: none;
+  }
+  #infoName { font-size: 1rem; color: rgba(220,240,255,0.95); }
+  #infoKind { font-size: 0.7rem; opacity: 0.6; margin-left: 6px; }
+  #infoPos { font-size: 0.8rem; margin-top: 4px; opacity: 0.85; }
   #compass {
     position: fixed; top: 16px; right: 16px;
     width: 56px; height: 56px; padding: 0;
@@ -42,8 +52,12 @@
   <canvas id="sky"></canvas>
   <div id="scope">🔭</div>
   <div id="hud">
-    <span id="dir">N</span>
-    <span id="coords">Az 0° · El 45°</span>
+    <span id="dir">북</span>
+    <span id="coords">방위각 0° · 고도 45°</span>
+    <div id="info">
+      <div><span id="infoName"></span><span id="infoKind"></span></div>
+      <div id="infoPos"></div>
+    </div>
   </div>
   <button id="compass" aria-label="내가 보는 방향으로 맞추기">
     <svg viewBox="0 0 56 56">
@@ -93,7 +107,7 @@ window.addEventListener('resize', resize);
 // 2. 실제 별 데이터 (겉보기 등급 상위 100개, RA/Dec 단위: 도)
 // RA: 적경(0~360), Dec: 적위(-90~90), mag: 등급(작을수록 밝음)
 // =====================
-const STARS = [
+const STARS_RAW = [
   { name: "시리우스",     ra: 101.287, dec: -16.716, mag: -1.46 },
   { name: "카노푸스",     ra: 95.988,  dec: -52.696, mag: -0.74 },
   { name: "아크투루스",   ra: 213.915, dec: 19.182,  mag: -0.05 },
@@ -195,6 +209,17 @@ const STARS = [
   { name: "알파피시스",   ra: 344.413, dec: -29.622, mag: 1.16  },
 ];
 
+// 같은 좌표로 중복 등록된 별 제거 (먼저 나온 이름을 유지 → 아크투루스/알파보오티스 중 아크투루스)
+const STARS = (() => {
+  const seen = new Set();
+  return STARS_RAW.filter(s => {
+    const key = s.ra.toFixed(2) + ',' + s.dec.toFixed(2);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+})();
+
 // =====================
 // 3. 센서 / GPS 상태
 // =====================
@@ -272,8 +297,29 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 const endDrag = () => { lastX = null; lastY = null; };
-canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointerup', e => {
+  // 거의 안 움직였으면 드래그가 아니라 탭 → 천체 선택
+  if (lastX !== null && Math.hypot(dragDX, dragDY) < 8) selectAt(e.clientX, e.clientY);
+  endDrag();
+});
 canvas.addEventListener('pointercancel', endDrag);
+
+// =====================
+// 천체 탭 선택
+// hitTargets: 이번 프레임에 화면에 그려진 천체 목록 (draw에서 채움)
+// =====================
+let hitTargets = [];
+let selected = null;   // { name, kind, getPos }
+
+function selectAt(x, y) {
+  let best = null, bestD = Infinity;
+  hitTargets.forEach(t => {
+    const d = Math.hypot(t.px - x, t.py - y);
+    if (d < t.hitR && d < bestD) { best = t; bestD = d; }
+  });
+  // 빈 하늘을 탭하면 선택 해제
+  selected = best ? { name: best.name, kind: best.kind, getPos: best.getPos } : null;
+}
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
@@ -316,12 +362,26 @@ function onOrientation(e) {
 }
 
 // HUD + 나침반 갱신 (draw에서 매 프레임 호출, 센서 없는 PC에서도 동작)
-const DIRS = ['N','NE','E','SE','S','SW','W','NW'];
+const DIRS = ['북','북동','동','남동','남','남서','서','북서'];
+const dirName = az => DIRS[Math.round(normAz(az) / 45) % 8];
+
 function updateHud() {
-  document.getElementById('dir').textContent = DIRS[Math.round(azimuth / 45) % 8];
-  const moon = getMoonPosition(userLat, userLon);
+  document.getElementById('dir').textContent = dirName(azimuth);
   document.getElementById('coords').textContent =
-    `${followCompass ? 'AR' : '자유'} · Az ${Math.round(azimuth)}° · El ${Math.round(elevation)}° | 달 Az${Math.round(moon.az)}° El${Math.round(moon.alt)}°`;
+    `${followCompass ? 'AR' : '자유'} · 방위각 ${Math.round(azimuth)}° · 고도 ${Math.round(elevation)}°`;
+
+  // 선택한 천체 정보 (매 프레임 다시 계산 → 시간이 지나면 값도 바뀜)
+  const info = document.getElementById('info');
+  if (selected) {
+    const p = selected.getPos();
+    document.getElementById('infoName').textContent = selected.name;
+    document.getElementById('infoKind').textContent = selected.kind;
+    document.getElementById('infoPos').textContent =
+      `방위각 ${Math.round(normAz(p.az))}° (${dirName(p.az)}) · 고도 ${Math.round(p.alt)}°`;
+    info.style.display = 'block';
+  } else {
+    info.style.display = 'none';
+  }
   // 바늘의 N이 화면 기준으로 실제 북쪽을 가리키게
   document.getElementById('needle').setAttribute('transform', `rotate(${-azimuth} 28 28)`);
   document.getElementById('compass').classList.toggle('free', !followCompass);
@@ -668,15 +728,28 @@ function drawGround() {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // 방위 표시 (N, E, S, W)
+  // 방위 표시 (북, 동, 남, 서)
   ctx.font = '13px monospace';
   ctx.textAlign = 'center';
-  [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([label, az]) => {
+  [['북', 0], ['동', 90], ['남', 180], ['서', 270]].forEach(([label, az]) => {
     const { px } = celestialToScreen(az, 0, azimuth, elevation);
     if (px < -20 || px > canvas.width + 20) return;
-    ctx.fillStyle = label === 'N' ? 'rgba(255,122,107,0.9)' : 'rgba(180,220,255,0.6)';
+    ctx.fillStyle = label === '북' ? 'rgba(255,122,107,0.9)' : 'rgba(180,220,255,0.6)';
     ctx.fillText(label, px, y + 20);
   });
+}
+
+// 선택한 천체 주위에 천천히 숨쉬는 링
+function drawSelection() {
+  if (!selected) return;
+  const t = hitTargets.find(h => h.name === selected.name);
+  if (!t) return;   // 화면 밖이거나 지평선 아래면 링 생략 (정보창은 유지)
+  const pulse = 1 + 0.08 * Math.sin(performance.now() / 300);
+  ctx.beginPath();
+  ctx.arc(t.px, t.py, t.ringR * pulse, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(180,220,255,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 }
 
 // 행성 스타일 (r: 점 반지름, glow: 빛번짐 RGB)
@@ -705,6 +778,7 @@ function draw() {
   if (azimuth >= 360) azimuth -= 360;
   elevation = targetEl;
   updateHud();
+  hitTargets = [];   // 이번 프레임에 탭할 수 있는 천체 목록
 
 
   // 별 그리기
@@ -722,6 +796,10 @@ function draw() {
     const brightness = Math.max(0.3, 1.0 - star.mag * 0.1);
 
     drawStar(px, py, r, brightness);
+    if (alt > 0) hitTargets.push({
+      name: star.name, kind: '별', px, py, hitR: 24, ringR: 12,
+      getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
+    });
   });
 
   // 행성 그리기
@@ -732,6 +810,10 @@ function draw() {
     const { px, py } = celestialToScreen(pos.az, pos.alt, azimuth, elevation);
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
     drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring);
+    if (pos.alt > 0) hitTargets.push({
+      name: pl.label, kind: '행성', px, py, hitR: 30, ringR: pl.r * 2.8,
+      getPos: () => TEST_MODE ? { ...TEST_POS[pl.key] } : getPlanetPosition(pl.key, userLat, userLon),
+    });
   });
 
   // 태양 그리기
@@ -741,6 +823,10 @@ function draw() {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
       drawSunFlat(px, py);
+      if (sun.alt > 0) hitTargets.push({
+        name: '태양', kind: '항성', px, py, hitR: 45, ringR: 70,
+        getPos: () => TEST_MODE ? { ...TEST_POS.sun } : getSunPosition(userLat, userLon),
+      });
     }
   }
 
@@ -752,11 +838,16 @@ function draw() {
     if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
       const { illumination, waning } = getMoonPhase();
       drawMoonFlat(px, py, 30, illumination, waning);
+      if (moon.alt > 0) hitTargets.push({
+        name: '달', kind: '위성', px, py, hitR: 40, ringR: 40,
+        getPos: () => TEST_MODE ? { ...TEST_POS.moon } : getMoonPosition(userLat, userLon),
+      });
     }
   }
 
   // 땅은 맨 마지막에: 지평선 아래 천체를 가림
   drawGround();
+  drawSelection();
 
   requestAnimationFrame(draw);
 }
