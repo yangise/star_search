@@ -80,6 +80,10 @@
 // =====================
 const TEST_MODE = true;
 
+// 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
+// 범위 조절이 끝나면 false로!
+const DEBUG_TAP = true;
+
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
   moon:    { alt: 40, az: 90 },
@@ -300,11 +304,14 @@ canvas.addEventListener('pointercancel', endDrag);
 let hitTargets = [];
 let selected = null;   // { name, kind, getPos, nearby }
 
-// hitR: 탭 인정 범위(넉넉하게), coreR: 실제로 그려진 몸체 크기
+// hitR: 탭 인정 범위 (= 선택 링 크기 ringR과 같게 맞춤), coreR: 실제로 그려진 몸체 크기
 // 1) 몸체 위를 정확히 탭했으면 그 천체가 최우선
 // 2) 아니면 탭 지점에서 가장 가까운 천체
 // 3) 후보가 여럿이면 같은 자리를 다시 탭할 때마다 다음 후보로 넘어감
+let lastTap = null;   // DEBUG_TAP용: 마지막 탭 위치
+
 function selectAt(x, y) {
+  lastTap = { x, y, t: performance.now() };
   const cands = hitTargets
     .map(t => ({ t, d: Math.hypot(t.px - x, t.py - y) }))
     .filter(c => c.d < c.t.hitR)
@@ -754,10 +761,32 @@ function drawSelection() {
   if (!t) return;   // 화면 밖이거나 지평선 아래면 링 생략 (정보창은 유지)
   const pulse = 1 + 0.08 * Math.sin(performance.now() / 300);
   ctx.beginPath();
-  ctx.arc(t.px, t.py, t.ringR * pulse, 0, Math.PI * 2);
+  // 링 크기 = 탭 범위 (보이는 원 안을 누르면 선택됨). 숨쉬기는 안쪽으로만
+  ctx.arc(t.px, t.py, t.ringR * (pulse - 0.08), 0, Math.PI * 2);
   ctx.strokeStyle = 'rgba(180,220,255,0.8)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+}
+
+// 탭 범위 디버그 표시
+function drawTapDebug() {
+  ctx.save();
+  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = 'rgba(255,255,120,0.35)';
+  ctx.lineWidth = 1;
+  hitTargets.forEach(t => {
+    ctx.beginPath();
+    ctx.arc(t.px, t.py, t.hitR, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+  // 마지막 탭 지점 (1.5초 동안)
+  if (lastTap && performance.now() - lastTap.t < 1500) {
+    ctx.beginPath();
+    ctx.arc(lastTap.x, lastTap.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,80,80,0.9)';
+    ctx.fill();
+  }
 }
 
 // 행성 스타일 (r: 점 반지름, glow: 빛번짐 RGB)
@@ -805,7 +834,7 @@ function draw() {
 
     drawStar(px, py, r, brightness);
     if (alt > 0) hitTargets.push({
-      name: star.name, kind: star.ko ? `별 · ${star.ko}` : '별', px, py, hitR: 28, coreR: 8, ringR: 12,
+      name: star.name, kind: star.ko ? `별 · ${star.ko}` : '별', px, py, hitR: 22, coreR: 8, ringR: 22,
       getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
     });
   });
@@ -819,7 +848,7 @@ function draw() {
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
     drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring);
     if (pos.alt > 0) hitTargets.push({
-      name: pl.label, kind: '행성', px, py, hitR: 34, coreR: pl.r + 6, ringR: pl.r * 2.8,
+      name: pl.label, kind: '행성', px, py, hitR: Math.max(22, pl.r * 3.5), coreR: pl.r + 6, ringR: Math.max(22, pl.r * 3.5),
       getPos: () => TEST_MODE ? { ...TEST_POS[pl.key] } : getPlanetPosition(pl.key, userLat, userLon),
     });
   });
@@ -832,7 +861,7 @@ function draw() {
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
       drawSunFlat(px, py);
       if (sun.alt > 0) hitTargets.push({
-        name: '태양', kind: '항성', px, py, hitR: 55, coreR: 30, ringR: 70,
+        name: '태양', kind: '항성', px, py, hitR: 55, coreR: 30, ringR: 55,
         getPos: () => TEST_MODE ? { ...TEST_POS.sun } : getSunPosition(userLat, userLon),
       });
     }
@@ -847,7 +876,7 @@ function draw() {
       const { illumination, waning } = getMoonPhase();
       drawMoonFlat(px, py, 30, illumination, waning);
       if (moon.alt > 0) hitTargets.push({
-        name: '달', kind: '위성', px, py, hitR: 45, coreR: 30, ringR: 40,
+        name: '달', kind: '위성', px, py, hitR: 45, coreR: 30, ringR: 45,
         getPos: () => TEST_MODE ? { ...TEST_POS.moon } : getMoonPosition(userLat, userLon),
       });
     }
@@ -856,6 +885,7 @@ function draw() {
   // 땅은 맨 마지막에: 지평선 아래 천체를 가림
   drawGround();
   drawSelection();
+  if (DEBUG_TAP) drawTapDebug();
 
   requestAnimationFrame(draw);
 }
