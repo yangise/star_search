@@ -477,6 +477,7 @@ function draw() {
 
   // 달 그리기
   const moon = getMoonPosition(userLat, userLon);
+   moon.alt = 40; moon.az = 90;
   if (moon.alt > -10) {
     const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
     if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
