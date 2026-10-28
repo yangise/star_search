@@ -557,7 +557,8 @@ function draw() {
   PLANET_STYLE.forEach(pl => {
     const pos = getPlanetPosition(pl.key, userLat, userLon);
     
-    pos.alt = 70; pos.az = 90; // 임시
+  if (pl.key === 'venus') { pos.alt = 40; pos.az = 70; }
+  if (pl.key === 'mars')  { pos.alt = 40; pos.az = 110; }
 
     if (pos.alt < -10) return;
     const { px, py } = celestialToScreen(pos.az, pos.alt, azimuth, elevation);
