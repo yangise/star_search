@@ -341,6 +341,99 @@ function drawStar(x, y, r, brightness, color = '255,255,255') {
   ctx.fill();
 }
 
+function drawSunFlat(px, py) {
+  const t = performance.now() / 1000;
+
+  // 부드러운 빛
+  const glow = ctx.createRadialGradient(px, py, 0, px, py, 140);
+  glow.addColorStop(0, 'rgba(255,200,70,0.55)');
+  glow.addColorStop(0.35, 'rgba(255,170,50,0.18)');
+  glow.addColorStop(1, 'rgba(255,150,40,0)');
+  ctx.beginPath();
+  ctx.arc(px, py, 140, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // 천천히 도는 광선 12개
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(t * 0.15);
+  ctx.strokeStyle = 'rgba(255,200,60,0.85)';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 5;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const inner = 38;
+    const outer = i % 2 === 0 ? 62 : 52;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+    ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 단색 원
+  ctx.beginPath();
+  ctx.arc(px, py, 28, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffc83d';
+  ctx.fill();
+}
+
+function drawMoonFlat(px, py, r, illumination, waning) {
+  // 빛번짐
+  const glow = ctx.createRadialGradient(px, py, r * 0.8, px, py, r + 45);
+  glow.addColorStop(0, 'rgba(235,235,210,0.22)');
+  glow.addColorStop(1, 'rgba(235,235,210,0)');
+  ctx.beginPath();
+  ctx.arc(px, py, r + 45, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.clip();
+
+  // 단색 달 + 크레이터
+  ctx.fillStyle = '#f1ead0';
+  ctx.fillRect(px - r, py - r, r * 2, r * 2);
+  ctx.fillStyle = 'rgba(190,180,150,0.35)';
+  [[-0.3, -0.25, 0.18], [0.25, 0.1, 0.22], [-0.1, 0.42, 0.12], [0.38, -0.42, 0.1]]
+    .forEach(([cx, cy, cr]) => {
+      ctx.beginPath();
+      ctx.arc(px + cx * r, py + cy * r, cr * r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+  // 위상 그림자 (기존 로직 그대로, 경계만 부드럽게)
+  const path = () => {
+    ctx.beginPath();
+    if (!waning) {
+      ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, false);
+      const ex = r * (1 - 2 * illumination);
+      ctx.ellipse(px, py, Math.abs(ex), r, 0, -Math.PI / 2, Math.PI / 2, ex > 0);
+    } else {
+      ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, false);
+      const ex = r * (2 * illumination - 1);
+      ctx.ellipse(px, py, Math.abs(ex), r, 0, Math.PI / 2, -Math.PI / 2, ex > 0);
+    }
+    ctx.closePath();
+  };
+
+  path();
+  ctx.fillStyle = 'rgba(0,5,12,0.88)';
+  ctx.fill();
+  // 경계 번짐: 굵기를 키우며 옅게 여러 번 덧칠
+  ctx.strokeStyle = 'rgba(0,5,12,0.12)';
+  for (let w = 3; w <= 15; w += 3) {
+    ctx.lineWidth = w;
+    path();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 // =====================
 // 8. 메인 루프
 // =====================
@@ -375,82 +468,20 @@ function draw() {
   });
     // 태양 그리기
   const sun = getSunPosition(userLat, userLon);
-  sun.alt = 30; sun.az = 90;
-
   if (sun.alt > -10) {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
-      const glow = ctx.createRadialGradient(px, py, 0, px, py, 130);
-      glow.addColorStop(0, 'rgba(255,220,120,0.9)');
-      glow.addColorStop(0.2, 'rgba(255,180,60,0.45)');
-      glow.addColorStop(1, 'rgba(255,140,30,0)');
-      ctx.beginPath();
-      ctx.arc(px, py, 130, 0, Math.PI * 2);
-      ctx.fillStyle = glow;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(px, py, 24, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff4b8';
-      ctx.fill();
+      drawSunFlat(px, py);
     }
   }
+
   // 달 그리기
   const moon = getMoonPosition(userLat, userLon);
   if (moon.alt > -10) {
     const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
-    if (px > -50 && px < canvas.width + 50 && py > -50 && py < canvas.height + 50) {
+    if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
       const { illumination, waning } = getMoonPhase();
-      const r = 50;
-
-      // 빛번짐
-      const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r + 40);
-      glowGrad.addColorStop(0, 'rgba(200,220,255,0.15)');
-      glowGrad.addColorStop(1, 'rgba(200,220,255,0)');
-      ctx.beginPath();
-      ctx.arc(px, py, r + 40, 0, Math.PI * 2);
-      ctx.fillStyle = glowGrad;
-      ctx.fill();
-
-      // 달 이미지를 원형으로 clip해서 그리기
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(moonImg, px - r, py - r, r * 2, r * 2);
-
-      // 위상 그림자 오버레이
-      // illumination: 0=신월(완전어둠), 1=보름달(완전밝음)
-      // waning: true면 하현달(오른쪽에 그림자), false면 상현달(왼쪽에 그림자)
-      const darkFraction = 1 - illumination; // 어두운 부분 비율
-
-      // 그림자가 덮는 x 폭: ellipse의 x 반지름
-      // darkFraction=0이면 그림자 없음, darkFraction=0.5이면 반원, darkFraction=1이면 전체
-      const shadowX = r * Math.abs(1 - 2 * Math.min(darkFraction, 0.5) / 0.5 * 0.5);
-      // 더 간단하고 정확한 계산:
-      // 신월→상현: 왼쪽 반원 그림자 + 오른쪽으로 줄어드는 타원
-      // 보름달→하현: 오른쪽 반원 그림자 + 왼쪽으로 줄어드는 타원
-
-      ctx.beginPath();
-      if (!waning) {
-        // 상현달 (초승달→반달→보름달 직전): 왼쪽이 어두움
-        // 어두운 쪽: 왼쪽 반원
-        ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, false); // 왼쪽 반원
-        // 타원으로 닫기: illumination이 0에 가까울수록 타원이 오른쪽까지 커짐
-        const ex = r * (1 - 2 * illumination); // illumination=0→r, illumination=0.5→0, illumination=1→-r
-        ctx.ellipse(px, py, Math.abs(ex), r, 0, -Math.PI / 2, Math.PI / 2, ex > 0);
-      } else {
-        // 하현달 (보름달 직후→반달→그믐달): 오른쪽이 어두움
-        // 어두운 쪽: 오른쪽 반원
-        ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, false); // 오른쪽 반원
-        // 타원으로 닫기: illumination이 1에 가까울수록 타원이 왼쪽까지 커짐
-        const ex = r * (2 * illumination - 1); // illumination=1→r, illumination=0.5→0, illumination=0→-r
-        ctx.ellipse(px, py, Math.abs(ex), r, 0, Math.PI / 2, -Math.PI / 2, ex > 0);
-      }
-      ctx.fillStyle = 'rgba(0,3,8,0.95)';
-      ctx.fill();
-
-      ctx.restore();
+      drawMoonFlat(px, py, 50, illumination, waning);
     }
   }
 
