@@ -242,7 +242,10 @@ let followCompass = true;   // true: AR 모드, false: 자유 모드
 let compassHeading = null;  // 센서가 알려준 최신 방위각 (PC는 null)
 
 let lastX = null, lastY = null, dragDX = 0;
-const clampEl = v => Math.max(0, Math.min(90, v));
+// 고도 하한: 지평선이 화면 아래쪽 82% 지점에서 멈추도록 (시야 60° 기준 약 19°)
+const HORIZON_STOP = 0.82;
+const EL_MIN = 60 * (HORIZON_STOP - 0.5);
+const clampEl = v => Math.max(EL_MIN, Math.min(90, v));
 const normAz = v => ((v % 360) + 360) % 360;
 const DEG_PER_PX_X = () => 60 / canvas.width;   // 시야 60° 기준
 const DEG_PER_PX_Y = () => 60 / canvas.height;
@@ -624,6 +627,44 @@ function drawPlanetFlat(px, py, r, color, glowColor, label, ring = false) {
   ctx.fillText(label, px, py + r + 18);
 }
 
+// 땅 + 지평선 + 방위 표시 (하늘과 같이 움직임)
+function drawGround() {
+  const y = celestialToScreen(0, 0, azimuth, elevation).py;   // 고도 0°의 화면 높이
+  if (y > canvas.height + 60) return;   // 지평선이 화면 아래로 충분히 내려가면 생략
+
+  // 지평선 위 대기광
+  const air = ctx.createLinearGradient(0, y - 70, 0, y);
+  air.addColorStop(0, 'rgba(90,140,200,0)');
+  air.addColorStop(1, 'rgba(90,140,200,0.18)');
+  ctx.fillStyle = air;
+  ctx.fillRect(0, y - 70, canvas.width, 70);
+
+  // 땅
+  const ground = ctx.createLinearGradient(0, y, 0, canvas.height);
+  ground.addColorStop(0, '#06111d');
+  ground.addColorStop(1, '#02060b');
+  ctx.fillStyle = ground;
+  ctx.fillRect(0, y, canvas.width, Math.max(0, canvas.height - y));
+
+  // 지평선 선
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(canvas.width, y);
+  ctx.strokeStyle = 'rgba(180,220,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 방위 표시 (N, E, S, W)
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([label, az]) => {
+    const { px } = celestialToScreen(az, 0, azimuth, elevation);
+    if (px < -20 || px > canvas.width + 20) return;
+    ctx.fillStyle = label === 'N' ? 'rgba(255,122,107,0.9)' : 'rgba(180,220,255,0.6)';
+    ctx.fillText(label, px, y + 20);
+  });
+}
+
 // 행성 스타일 (r: 점 반지름, glow: 빛번짐 RGB)
 const PLANET_STYLE = [
   { key: 'mercury', label: '수성',   r: 4, color: '#b9b2a8', glow: '200,195,185' },
@@ -699,6 +740,9 @@ function draw() {
       drawMoonFlat(px, py, 30, illumination, waning);
     }
   }
+
+  // 땅은 맨 마지막에: 지평선 아래 천체를 가림
+  drawGround();
 
   requestAnimationFrame(draw);
 }
