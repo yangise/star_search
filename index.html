@@ -381,7 +381,7 @@ function drawSunFlat(px, py) {
 
 function drawMoonFlat(px, py, r, illumination, waning) {
   // 빛번짐
-  const glow = ctx.createRadialGradient(px, py, r * 0.8, px, py, r + 45);
+  const glow = ctx.createRadialGradient(px, py, r * 0.6, px, py, r + 45);
   glow.addColorStop(0, 'rgba(235,235,210,0.22)');
   glow.addColorStop(1, 'rgba(235,235,210,0)');
   ctx.beginPath();
