@@ -375,6 +375,8 @@ function draw() {
   });
     // 태양 그리기
   const sun = getSunPosition(userLat, userLon);
+  sun.alt = 30; sun.az = 90;
+
   if (sun.alt > -10) {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
