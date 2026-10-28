@@ -240,8 +240,9 @@ document.getElementById('startBtn').addEventListener('click', () => {
 // =====================
 let followCompass = true;   // true: AR 모드, false: 자유 모드
 let compassHeading = null;  // 센서가 알려준 최신 방위각 (PC는 null)
+let sensorEl = null;        // 센서가 알려준 최신 고도 (PC는 null)
 
-let lastX = null, lastY = null, dragDX = 0;
+let lastX = null, lastY = null, dragDX = 0, dragDY = 0;
 // 고도 하한: 지평선이 화면 아래쪽 82% 지점에서 멈추도록 (시야 60° 기준 약 19°)
 const HORIZON_STOP = 0.82;
 const EL_MIN = 60 * (HORIZON_STOP - 0.5);
@@ -251,7 +252,7 @@ const DEG_PER_PX_X = () => 60 / canvas.width;   // 시야 60° 기준
 const DEG_PER_PX_Y = () => 60 / canvas.height;
 
 canvas.addEventListener('pointerdown', e => {
-  lastX = e.clientX; lastY = e.clientY; dragDX = 0;
+  lastX = e.clientX; lastY = e.clientY; dragDX = 0; dragDY = 0;
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove', e => {
@@ -260,13 +261,15 @@ canvas.addEventListener('pointermove', e => {
   const dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
 
-  // 상하: 고도 (손가락을 따라 하늘이 움직임)
-  targetEl = clampEl(targetEl + dy * DEG_PER_PX_Y());
+  // AR 모드에서 8px 이상 끌면 자유 모드로 전환 (살짝 닿은 터치는 무시)
+  dragDX += dx; dragDY += dy;
+  if (followCompass && Math.hypot(dragDX, dragDY) > 8) followCompass = false;
 
-  // 좌우: 8px 이상 끌었을 때만 자유 모드로 전환 (세로로 끌 때 살짝 흔들리는 것 무시)
-  dragDX += dx;
-  if (followCompass && Math.abs(dragDX) > 8) followCompass = false;
-  if (!followCompass) targetAz = normAz(targetAz - dx * DEG_PER_PX_X());
+  // 자유 모드: 상하=고도, 좌우=방위각 (손가락을 따라 하늘이 움직임)
+  if (!followCompass) {
+    targetEl = clampEl(targetEl + dy * DEG_PER_PX_Y());
+    targetAz = normAz(targetAz - dx * DEG_PER_PX_X());
+  }
 });
 const endDrag = () => { lastX = null; lastY = null; };
 canvas.addEventListener('pointerup', endDrag);
@@ -274,11 +277,9 @@ canvas.addEventListener('pointercancel', endDrag);
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
+  followCompass = false;   // 휠/트랙패드를 쓰면 자유 모드
   targetEl = clampEl(targetEl - e.deltaY * 0.05);
-  if (Math.abs(e.deltaX) > 2) {   // 트랙패드 좌우 스크롤
-    followCompass = false;
-    targetAz = normAz(targetAz + e.deltaX * 0.05);
-  }
+  targetAz = normAz(targetAz + e.deltaX * 0.05);
 }, { passive: false });
 
 // 나침반 버튼: 내가 실제로 보는 방향으로 다시 맞추고 AR 모드로 복귀
@@ -286,6 +287,7 @@ document.getElementById('compass').addEventListener('click', () => {
   if (compassHeading !== null) {
     followCompass = true;
     targetAz = compassHeading;
+    if (sensorEl !== null) targetEl = clampEl(sensorEl);
   } else {
     targetAz = 0;   // 센서 없는 PC: 북쪽으로 정렬
   }
@@ -297,8 +299,20 @@ function onOrientation(e) {
   } else if (e.alpha !== null) {
     compassHeading = 360 - e.alpha;
   }
-  // AR 모드일 때만 화면이 나침반을 따라감
-  if (followCompass && compassHeading !== null) targetAz = compassHeading;
+  if (e.beta !== null) {
+    // 기존 방식 그대로: beta 0(눕힘)~90(세움) → 고도 90~0
+    sensorEl = 90 - Math.max(0, Math.min(90, e.beta));
+  }
+
+  // AR 모드일 때만 화면이 센서를 따라감 (방위각 + 고도)
+  if (followCompass) {
+    if (compassHeading !== null) targetAz = compassHeading;
+    if (sensorEl !== null) {
+      // 급격한 변화 방지: 한 번에 10도 이상 안 바뀌게
+      const d = clampEl(sensorEl) - targetEl;
+      targetEl += Math.max(-10, Math.min(10, d));
+    }
+  }
 }
 
 // HUD + 나침반 갱신 (draw에서 매 프레임 호출, 센서 없는 PC에서도 동작)
