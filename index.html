@@ -11,6 +11,17 @@
   #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
   #coords { font-size: 0.75rem; opacity: 0.6; }
+  #compass {
+    position: fixed; top: 16px; right: 16px;
+    width: 56px; height: 56px; padding: 0;
+    border-radius: 50%;
+    background: rgba(180,220,255,0.08);
+    border: 1.5px solid rgba(180,220,255,0.7);
+    cursor: pointer;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  #compass svg { width: 100%; height: 100%; display: block; }
+  #compass.free { border-color: rgba(180,220,255,0.2); background: rgba(180,220,255,0.03); }
   #startBtn {
     position: fixed;
     top: 50%; left: 50%;
@@ -34,6 +45,16 @@
     <span id="dir">N</span>
     <span id="coords">Az 0° · El 45°</span>
   </div>
+  <button id="compass" aria-label="내가 보는 방향으로 맞추기">
+    <svg viewBox="0 0 56 56">
+      <g id="needle" transform="rotate(0 28 28)">
+        <polygon points="28,9 33,28 23,28" fill="#ff7a6b"/>
+        <polygon points="28,47 33,28 23,28" fill="rgba(180,220,255,0.45)"/>
+        <text x="28" y="8" fill="#ff7a6b" font-size="7" font-family="monospace" text-anchor="middle">N</text>
+      </g>
+      <circle cx="28" cy="28" r="2.5" fill="#cfe6ff"/>
+    </svg>
+  </button>
   <button id="startBtn">🔭 하늘 보기</button>
 
 <script>
@@ -213,43 +234,80 @@ document.getElementById('startBtn').addEventListener('click', () => {
 });
 
 // =====================
-// 고도 조절: 화면을 위아래로 드래그 (PC는 마우스 휠)
-// 좌우 드래그는 무시, 방위각은 센서로만 움직임
+// 화면 이동: 드래그(상하=고도, 좌우=방위각), PC는 마우스 휠
+// - AR 모드(followCompass=true): 방위각은 나침반을 따라감
+// - 좌우로 끌면 자유 모드로 전환, 나침반 버튼을 누르면 다시 AR 모드
 // =====================
-let dragY = null;
+let followCompass = true;   // true: AR 모드, false: 자유 모드
+let compassHeading = null;  // 센서가 알려준 최신 방위각 (PC는 null)
+
+let lastX = null, lastY = null, dragDX = 0;
 const clampEl = v => Math.max(0, Math.min(90, v));
+const normAz = v => ((v % 360) + 360) % 360;
+const DEG_PER_PX_X = () => 60 / canvas.width;   // 시야 60° 기준
+const DEG_PER_PX_Y = () => 60 / canvas.height;
 
 canvas.addEventListener('pointerdown', e => {
-  dragY = e.clientY;
+  lastX = e.clientX; lastY = e.clientY; dragDX = 0;
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove', e => {
-  if (dragY === null) return;
-  const dy = e.clientY - dragY;   // 세로 이동량만 사용
-  dragY = e.clientY;
-  // 손가락이 움직인 만큼 하늘이 따라오게 (시야 60° 기준)
-  targetEl = clampEl(targetEl + dy / canvas.height * 60);
+  if (lastX === null) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+
+  // 상하: 고도 (손가락을 따라 하늘이 움직임)
+  targetEl = clampEl(targetEl + dy * DEG_PER_PX_Y());
+
+  // 좌우: 8px 이상 끌었을 때만 자유 모드로 전환 (세로로 끌 때 살짝 흔들리는 것 무시)
+  dragDX += dx;
+  if (followCompass && Math.abs(dragDX) > 8) followCompass = false;
+  if (!followCompass) targetAz = normAz(targetAz - dx * DEG_PER_PX_X());
 });
-const endDrag = () => { dragY = null; };
+const endDrag = () => { lastX = null; lastY = null; };
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   targetEl = clampEl(targetEl - e.deltaY * 0.05);
+  if (Math.abs(e.deltaX) > 2) {   // 트랙패드 좌우 스크롤
+    followCompass = false;
+    targetAz = normAz(targetAz + e.deltaX * 0.05);
+  }
 }, { passive: false });
+
+// 나침반 버튼: 내가 실제로 보는 방향으로 다시 맞추고 AR 모드로 복귀
+document.getElementById('compass').addEventListener('click', () => {
+  if (compassHeading !== null) {
+    followCompass = true;
+    targetAz = compassHeading;
+  } else {
+    targetAz = 0;   // 센서 없는 PC: 북쪽으로 정렬
+  }
+});
 
 function onOrientation(e) {
   if (e.webkitCompassHeading !== undefined) {
-    targetAz = e.webkitCompassHeading;
+    compassHeading = e.webkitCompassHeading;
   } else if (e.alpha !== null) {
-    targetAz = 360 - e.alpha;
+    compassHeading = 360 - e.alpha;
   }
-  const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
-  document.getElementById('dir').textContent = dirs[Math.round(targetAz / 45) % 8];
-    const moon = getMoonPosition(userLat, userLon);
-    document.getElementById('coords').textContent =
-    `Az ${Math.round(targetAz)}° · El ${Math.round(targetEl)}° | 달 Az${Math.round(moon.az)}° El${Math.round(moon.alt)}°`;
+  // AR 모드일 때만 화면이 나침반을 따라감
+  if (followCompass && compassHeading !== null) targetAz = compassHeading;
+}
+
+// HUD + 나침반 갱신 (draw에서 매 프레임 호출, 센서 없는 PC에서도 동작)
+const DIRS = ['N','NE','E','SE','S','SW','W','NW'];
+function updateHud() {
+  document.getElementById('dir').textContent = DIRS[Math.round(azimuth / 45) % 8];
+  const moon = getMoonPosition(userLat, userLon);
+  document.getElementById('coords').textContent =
+    `${followCompass ? 'AR' : '자유'} · Az ${Math.round(azimuth)}° · El ${Math.round(elevation)}° | 달 Az${Math.round(moon.az)}° El${Math.round(moon.alt)}°`;
+  // 바늘의 N이 화면 기준으로 실제 북쪽을 가리키게
+  document.getElementById('needle').setAttribute('transform', `rotate(${-azimuth} 28 28)`);
+  document.getElementById('compass').classList.toggle('free', !followCompass);
 }
 
 // =====================
@@ -591,6 +649,7 @@ function draw() {
   if (azimuth < 0) azimuth += 360;
   if (azimuth >= 360) azimuth -= 360;
   elevation = targetEl;
+  updateHud();
 
 
   // 별 그리기
