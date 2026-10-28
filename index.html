@@ -21,6 +21,7 @@
   #infoName { font-size: 1rem; color: rgba(220,240,255,0.95); }
   #infoKind { font-size: 0.7rem; opacity: 0.6; margin-left: 6px; }
   #infoPos { font-size: 0.8rem; margin-top: 4px; opacity: 0.85; }
+  #infoHint { font-size: 0.7rem; margin-top: 4px; opacity: 0.5; display: none; }
   #compass {
     position: fixed; top: 16px; right: 16px;
     width: 56px; height: 56px; padding: 0;
@@ -57,6 +58,7 @@
     <div id="info">
       <div><span id="infoName"></span><span id="infoKind"></span></div>
       <div id="infoPos"></div>
+      <div id="infoHint"></div>
     </div>
   </div>
   <button id="compass" aria-label="내가 보는 방향으로 맞추기">
@@ -76,7 +78,7 @@
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
 // push 전에 반드시 false로!
 // =====================
-const TEST_MODE = false;
+const TEST_MODE = true;
 
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
@@ -268,6 +270,8 @@ let compassHeading = null;  // 센서가 알려준 최신 방위각 (PC는 null)
 let sensorEl = null;        // 센서가 알려준 최신 고도 (PC는 null)
 
 let lastX = null, lastY = null, dragDX = 0, dragDY = 0;
+// 이 거리(px) 이하로 움직이면 '탭', 넘으면 '드래그' (손떨림 감안)
+const TAP_SLOP = 12;
 // 고도 하한: 지평선이 화면 아래쪽 82% 지점에서 멈추도록 (시야 60° 기준 약 19°)
 const HORIZON_STOP = 0.82;
 const EL_MIN = 60 * (HORIZON_STOP - 0.5);
@@ -286,9 +290,9 @@ canvas.addEventListener('pointermove', e => {
   const dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
 
-  // AR 모드에서 8px 이상 끌면 자유 모드로 전환 (살짝 닿은 터치는 무시)
+  // AR 모드에서 TAP_SLOP 이상 끌면 자유 모드로 전환 (탭할 때 손이 살짝 밀리는 건 무시)
   dragDX += dx; dragDY += dy;
-  if (followCompass && Math.hypot(dragDX, dragDY) > 8) followCompass = false;
+  if (followCompass && Math.hypot(dragDX, dragDY) > TAP_SLOP) followCompass = false;
 
   // 자유 모드: 상하=고도, 좌우=방위각 (손가락을 따라 하늘이 움직임)
   if (!followCompass) {
@@ -299,7 +303,7 @@ canvas.addEventListener('pointermove', e => {
 const endDrag = () => { lastX = null; lastY = null; };
 canvas.addEventListener('pointerup', e => {
   // 거의 안 움직였으면 드래그가 아니라 탭 → 천체 선택
-  if (lastX !== null && Math.hypot(dragDX, dragDY) < 8) selectAt(e.clientX, e.clientY);
+  if (lastX !== null && Math.hypot(dragDX, dragDY) <= TAP_SLOP) selectAt(e.clientX, e.clientY);
   endDrag();
 });
 canvas.addEventListener('pointercancel', endDrag);
@@ -309,16 +313,28 @@ canvas.addEventListener('pointercancel', endDrag);
 // hitTargets: 이번 프레임에 화면에 그려진 천체 목록 (draw에서 채움)
 // =====================
 let hitTargets = [];
-let selected = null;   // { name, kind, getPos }
+let selected = null;   // { name, kind, getPos, nearby }
 
+// hitR: 탭 인정 범위(넉넉하게), coreR: 실제로 그려진 몸체 크기
+// 1) 몸체 위를 정확히 탭했으면 그 천체가 최우선
+// 2) 아니면 탭 지점에서 가장 가까운 천체
+// 3) 후보가 여럿이면 같은 자리를 다시 탭할 때마다 다음 후보로 넘어감
 function selectAt(x, y) {
-  let best = null, bestD = Infinity;
-  hitTargets.forEach(t => {
-    const d = Math.hypot(t.px - x, t.py - y);
-    if (d < t.hitR && d < bestD) { best = t; bestD = d; }
-  });
+  const cands = hitTargets
+    .map(t => ({ t, d: Math.hypot(t.px - x, t.py - y) }))
+    .filter(c => c.d < c.t.hitR)
+    .sort((a, b) => ((a.d > a.t.coreR) - (b.d > b.t.coreR)) || (a.d - b.d));
+
   // 빈 하늘을 탭하면 선택 해제
-  selected = best ? { name: best.name, kind: best.kind, getPos: best.getPos } : null;
+  if (cands.length === 0) { selected = null; return; }
+
+  let idx = 0;
+  if (selected) {
+    const i = cands.findIndex(c => c.t.name === selected.name);
+    if (i >= 0) idx = (i + 1) % cands.length;
+  }
+  const t = cands[idx].t;
+  selected = { name: t.name, kind: t.kind, getPos: t.getPos, nearby: cands.length - 1 };
 }
 
 canvas.addEventListener('wheel', e => {
@@ -378,6 +394,13 @@ function updateHud() {
     document.getElementById('infoKind').textContent = selected.kind;
     document.getElementById('infoPos').textContent =
       `방위각 ${Math.round(normAz(p.az))}° (${dirName(p.az)}) · 고도 ${Math.round(p.alt)}°`;
+    const hint = document.getElementById('infoHint');
+    if (selected.nearby > 0) {
+      hint.textContent = `근처에 ${selected.nearby}개 더 있어요 · 같은 곳을 다시 탭하면 전환`;
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
     info.style.display = 'block';
   } else {
     info.style.display = 'none';
@@ -797,7 +820,7 @@ function draw() {
 
     drawStar(px, py, r, brightness);
     if (alt > 0) hitTargets.push({
-      name: star.name, kind: '별', px, py, hitR: 24, ringR: 12,
+      name: star.name, kind: '별', px, py, hitR: 36, coreR: 8, ringR: 12,
       getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
     });
   });
@@ -811,7 +834,7 @@ function draw() {
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
     drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring);
     if (pos.alt > 0) hitTargets.push({
-      name: pl.label, kind: '행성', px, py, hitR: 30, ringR: pl.r * 2.8,
+      name: pl.label, kind: '행성', px, py, hitR: 44, coreR: pl.r + 6, ringR: pl.r * 2.8,
       getPos: () => TEST_MODE ? { ...TEST_POS[pl.key] } : getPlanetPosition(pl.key, userLat, userLon),
     });
   });
@@ -824,7 +847,7 @@ function draw() {
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
       drawSunFlat(px, py);
       if (sun.alt > 0) hitTargets.push({
-        name: '태양', kind: '항성', px, py, hitR: 45, ringR: 70,
+        name: '태양', kind: '항성', px, py, hitR: 70, coreR: 30, ringR: 70,
         getPos: () => TEST_MODE ? { ...TEST_POS.sun } : getSunPosition(userLat, userLon),
       });
     }
@@ -839,7 +862,7 @@ function draw() {
       const { illumination, waning } = getMoonPhase();
       drawMoonFlat(px, py, 30, illumination, waning);
       if (moon.alt > 0) hitTargets.push({
-        name: '달', kind: '위성', px, py, hitR: 40, ringR: 40,
+        name: '달', kind: '위성', px, py, hitR: 55, coreR: 30, ringR: 40,
         getPos: () => TEST_MODE ? { ...TEST_POS.moon } : getMoonPosition(userLat, userLon),
       });
     }
