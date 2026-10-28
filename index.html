@@ -247,6 +247,17 @@ function getMoonPosition(lat, lon) {
   return raDecToAltAz((ra + 360) % 360, dec, lat, lon);
 }
 
+function getSunPosition(lat, lon) {
+  const n = getJulianDate() - 2451545.0;
+  const L = (280.460 + 0.9856474 * n) % 360;
+  const g = toRad((357.528 + 0.9856003 * n) % 360);
+  const lambda = toRad(L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g));
+  const eps = toRad(23.439 - 0.0000004 * n);
+  const ra = (toDeg(Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda))) + 360) % 360;
+  const dec = toDeg(Math.asin(Math.sin(eps) * Math.sin(lambda)));
+  return raDecToAltAz(ra, dec, lat, lon);
+}
+
 // 달 위상 계산 (정확한 신월 기준점 사용)
 // 기준: 2000년 1월 6일 18:14 UTC = JD 2451549.26 (알려진 신월)
 function getMoonPhase() {
@@ -362,7 +373,26 @@ function draw() {
 
     drawStar(px, py, r, brightness);
   });
+    // 태양 그리기
+  const sun = getSunPosition(userLat, userLon);
+  if (sun.alt > -10) {
+    const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
+    if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
+      const glow = ctx.createRadialGradient(px, py, 0, px, py, 130);
+      glow.addColorStop(0, 'rgba(255,220,120,0.9)');
+      glow.addColorStop(0.2, 'rgba(255,180,60,0.45)');
+      glow.addColorStop(1, 'rgba(255,140,30,0)');
+      ctx.beginPath();
+      ctx.arc(px, py, 130, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
 
+      ctx.beginPath();
+      ctx.arc(px, py, 24, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff4b8';
+      ctx.fill();
+    }
+  }
   // 달 그리기
   const moon = getMoonPosition(userLat, userLon);
   if (moon.alt > -10) {
