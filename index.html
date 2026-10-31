@@ -264,7 +264,7 @@ let lastX = null, lastY = null, dragDX = 0, dragDY = 0;
 const TAP_SLOP = 12;
 // 손가락 보정: 터치는 실제 닿는 중심이 '노린 곳'보다 오른쪽 아래로 잡힘
 // 빨간 점이 손끝에 오도록 숫자를 조절 (px, 양수 = 왼쪽/위로 당김)
-const TOUCH_OFFSET = { x: 4, y: -10 };
+const TOUCH_OFFSET = { x: 7, y: -20 };
 // 고도 하한: 지평선이 화면 아래쪽 82% 지점에서 멈추도록 (시야 60° 기준 약 19°)
 const HORIZON_STOP = 0.82;
 const EL_MIN = 60 * (HORIZON_STOP - 0.5);
