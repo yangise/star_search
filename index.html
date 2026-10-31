@@ -59,6 +59,7 @@
       <div id="infoPos"></div>
       <div id="infoHint"></div>
     </div>
+    <span id="sensorDebug" style="font-size:0.7rem;opacity:0.7;white-space:pre"></span>
   </div>
   <button id="compass" aria-label="내가 보는 방향으로 맞추기">
     <svg viewBox="0 0 56 56">
@@ -77,11 +78,11 @@
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
 // push 전에 반드시 false로!
 // =====================
-const TEST_MODE = false;
+const TEST_MODE = true;
 
 // 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
 // 범위 조절이 끝나면 false로!
-const DEBUG_TAP = false;
+const DEBUG_TAP = true;
 
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
@@ -356,7 +357,10 @@ document.getElementById('compass').addEventListener('click', () => {
   }
 });
 
+let rawSensor = null;   // 디버그용: 센서 원본 값
+
 function onOrientation(e) {
+  rawSensor = { a: e.alpha, b: e.beta, g: e.gamma, h: e.webkitCompassHeading, acc: e.webkitCompassAccuracy };
   if (e.webkitCompassHeading !== undefined) {
     compassHeading = e.webkitCompassHeading;
   } else if (e.alpha !== null) {
@@ -386,6 +390,14 @@ const DIRS = ['북','북동','동','남동','남','남서','서','북서'];
 const dirName = az => DIRS[Math.round(normAz(az) / 45) % 8];
 
 function updateHud() {
+  // 센서 원본 값 (DEBUG_TAP일 때만): alpha/beta/gamma = 폰 회전, heading = 나침반, acc = 나침반 오차(도)
+  const sd = document.getElementById('sensorDebug');
+  if (DEBUG_TAP && rawSensor) {
+    const f = v => (v === undefined || v === null) ? '-' : Math.round(v);
+    sd.textContent = `α ${f(rawSensor.a)}  β ${f(rawSensor.b)}  γ ${f(rawSensor.g)}\nheading ${f(rawSensor.h)}  오차 ±${f(rawSensor.acc)}°`;
+  } else {
+    sd.textContent = '';
+  }
   document.getElementById('dir').textContent = dirName(azimuth);
   document.getElementById('coords').textContent =
     `${followCompass ? 'AR' : '자유'} · 방위각 ${Math.round(azimuth)}° · 고도 ${Math.round(elevation)}°`;
@@ -791,9 +803,9 @@ const LAND = [[-59.6,-80.0,-60.2,-81.0,-62.3,-80.9,-64.5,-80.9,-65.7,-80.6,-64.0
 // 지구 반구: 화면 아래 가운데 고정, 내 위치(GPS) 표시
 // =====================
 // GLOBE_SHOW: 원 지름의 몇 %가 화면에 보일지 (0.5 = 반구, 0.25 = 반의반구 느낌)
-const GLOBE_SHOW = 0.36;
+const GLOBE_SHOW = 0.28;
 // 지구 밝기 (1 = 원래 색, 낮출수록 어두움). 밤하늘에서 눈부시지 않게 낮춤
-const EARTH_BRIGHTNESS = 0.4;
+const EARTH_BRIGHTNESS = 0.6;
 
 function globeGeom() {
   // 지구본은 아래 20%(지구 영역) 안에 들어가는 크기로
