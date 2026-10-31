@@ -78,11 +78,11 @@
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
 // push 전에 반드시 false로!
 // =====================
-const TEST_MODE = true;
+const TEST_MODE = false;
 
 // 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
 // 범위 조절이 끝나면 false로!
-const DEBUG_TAP = true;
+const DEBUG_TAP = false;
 
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
@@ -359,29 +359,67 @@ document.getElementById('compass').addEventListener('click', () => {
 
 let rawSensor = null;   // 디버그용: 센서 원본 값
 
+// =====================
+// 센서 → 카메라 방향 계산
+// 폰의 세 축 회전(α 좌우 회전, β 앞뒤 기울기, γ 옆 기울기)으로 회전 행렬을 만들고,
+// 폰 뒷면(카메라)이 향하는 벡터를 구해 방위각/고도로 바꿈.
+// iOS heading은 '폰 윗변이 가리키는 방향'이라 수직보다 뒤로 젖히면 180° 뒤집힘 → 직접 쓰지 않고,
+// 폰이 덜 기울었을 때만(믿을 수 있을 때) α의 북쪽 기준(alphaOffset)을 맞추는 데 사용
+// =====================
+let alphaOffset = null;
+const angDiff = (a, b) => ((a - b + 540) % 360) - 180;   // a - b 를 -180~180 범위로
+
+function cameraDirection(alphaDeg, betaDeg, gammaDeg) {
+  const a = toRad(alphaDeg), b = toRad(betaDeg), g = toRad(gammaDeg);
+  const sA = Math.sin(a), cA = Math.cos(a), sB = Math.sin(b), cB = Math.cos(b), sG = Math.sin(g), cG = Math.cos(g);
+  // 카메라 방향 = 폰의 -z축 (동쪽 x, 북쪽 y, 위쪽 z)
+  const vx = -(cA * sG + sA * sB * cG);
+  const vy = cA * sB * cG - sA * sG;
+  const vz = -cB * cG;
+  return {
+    az: normAz(toDeg(Math.atan2(vx, vy))),
+    el: toDeg(Math.asin(Math.max(-1, Math.min(1, vz)))),
+  };
+}
+
 function onOrientation(e) {
   rawSensor = { a: e.alpha, b: e.beta, g: e.gamma, h: e.webkitCompassHeading, acc: e.webkitCompassAccuracy };
-  if (e.webkitCompassHeading !== undefined) {
-    compassHeading = e.webkitCompassHeading;
-  } else if (e.alpha !== null) {
-    compassHeading = 360 - e.alpha;
-  }
-  if (e.beta !== null) {
-    // AR: 폰 뒷면(카메라)이 향하는 곳 = 보는 곳
-    // 세워 들면(beta 90) 지평선 0°, 윗부분을 뒤로 젖히면(beta→180) 천정 90°, 앞으로 숙이면(beta→0) 땅
-    let b = e.beta;
-    if (b < -90) b += 360;   // 180°를 넘어가며 -180 쪽으로 뒤집힌 값 이어 붙이기
-    sensorEl = Math.max(-90, Math.min(90, b - 90));
+  if (e.alpha === null || e.beta === null || e.gamma === null) return;
+
+  let absAlpha;
+  const h = e.webkitCompassHeading;
+  if (h !== undefined && h !== null) {
+    // iOS: 폰이 수직보다 덜 기울었을 때(|β| < 70°) heading = 360 - (북쪽 기준 α) 가 성립 → 기준값 갱신
+    if (Math.abs(e.beta) < 70) {
+      const off = normAz(360 - h - e.alpha);
+      alphaOffset = alphaOffset === null ? off : normAz(alphaOffset + 0.1 * angDiff(off, alphaOffset));
+    }
+    if (alphaOffset === null) {
+      // 아직 기준을 못 잡음(처음부터 뒤로 젖힌 상태): heading 뒤집힘만 보정해서 임시로 사용
+      compassHeading = e.beta > 90 ? normAz(h + 180) : h;
+      sensorEl = Math.max(-90, Math.min(90, e.beta - 90));
+      applySensor();
+      return;
+    }
+    absAlpha = e.alpha + alphaOffset;
+  } else {
+    absAlpha = e.alpha;   // 안드로이드 등: α를 그대로 사용
   }
 
-  // AR 모드일 때만 화면이 센서를 따라감 (방위각 + 고도)
-  if (followCompass) {
-    if (compassHeading !== null) targetAz = compassHeading;
-    if (sensorEl !== null) {
-      // 급격한 변화 방지: 한 번에 10도 이상 안 바뀌게
-      const d = clampElAR(sensorEl) - targetEl;
-      targetEl += Math.max(-10, Math.min(10, d));
-    }
+  const dir = cameraDirection(absAlpha, e.beta, e.gamma);
+  compassHeading = dir.az;
+  sensorEl = dir.el;
+  applySensor();
+}
+
+// AR 모드일 때만 화면이 센서를 따라감 (방위각 + 고도)
+function applySensor() {
+  if (!followCompass) return;
+  if (compassHeading !== null) targetAz = compassHeading;
+  if (sensorEl !== null) {
+    // 급격한 변화 방지: 한 번에 10도 이상 안 바뀌게
+    const d = clampElAR(sensorEl) - targetEl;
+    targetEl += Math.max(-10, Math.min(10, d));
   }
 }
 
