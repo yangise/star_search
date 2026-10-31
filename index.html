@@ -7,6 +7,7 @@
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000508; width: 100%; height: 100vh; overflow: hidden; touch-action: none; overscroll-behavior: none; }
+  #sky { display: block; }   /* 캔버스를 inline 대신 block으로: 위치 어긋남 방지 */
   #scope { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 2.5rem; }
   #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
@@ -261,6 +262,9 @@ let sensorEl = null;        // 센서가 알려준 최신 고도 (PC는 null)
 let lastX = null, lastY = null, dragDX = 0, dragDY = 0;
 // 이 거리(px) 이하로 움직이면 '탭', 넘으면 '드래그' (손떨림 감안)
 const TAP_SLOP = 12;
+// 손가락 보정: 터치는 실제 닿는 중심이 '노린 곳'보다 오른쪽 아래로 잡힘
+// 빨간 점이 손끝에 오도록 숫자를 조절 (px, 양수 = 왼쪽/위로 당김)
+const TOUCH_OFFSET = { x: 4, y: 10 };
 // 고도 하한: 지평선이 화면 아래쪽 82% 지점에서 멈추도록 (시야 60° 기준 약 19°)
 const HORIZON_STOP = 0.82;
 const EL_MIN = 60 * (HORIZON_STOP - 0.5);
@@ -292,7 +296,11 @@ canvas.addEventListener('pointermove', e => {
 const endDrag = () => { lastX = null; lastY = null; };
 canvas.addEventListener('pointerup', e => {
   // 거의 안 움직였으면 드래그가 아니라 탭 → 천체 선택
-  if (lastX !== null && Math.hypot(dragDX, dragDY) <= TAP_SLOP) selectAt(e.clientX, e.clientY);
+  if (lastX !== null && Math.hypot(dragDX, dragDY) <= TAP_SLOP) {
+    const touch = e.pointerType === 'touch';
+    selectAt(e.clientX - (touch ? TOUCH_OFFSET.x : 0),
+             e.clientY - (touch ? TOUCH_OFFSET.y : 0));
+  }
   endDrag();
 });
 canvas.addEventListener('pointercancel', endDrag);
