@@ -320,10 +320,10 @@ let lastTap = null;   // DEBUG_TAP용: 마지막 탭 위치
 
 function selectAt(x, y) {
   lastTap = { x, y, t: performance.now() };
-  if (isOnGlobe(x, y)) return;   // 지구본 위를 누르면 무시 (선택 유지)
+  if (y > panelTop()) return;   // 지구 영역을 누르면 무시 (선택 유지)
   const cands = hitTargets
     .map(t => ({ t, d: Math.hypot(t.px - x, t.py - y) }))
-    .filter(c => c.d < c.t.hitR)
+    .filter(c => c.d < c.t.hitR && c.t.py < panelTop())   // 지구 영역 뒤에 가려진 천체는 제외
     .sort((a, b) => ((a.d > a.t.coreR) - (b.d > b.t.coreR)) || (a.d - b.d));
 
   // 빈 하늘을 탭하면 선택 해제
@@ -728,41 +728,27 @@ function drawPlanetFlat(px, py, r, color, glowColor, label, ring = false) {
   ctx.fillText(label, px, py + r + 18);
 }
 
-// 땅 + 지평선 + 방위 표시 (하늘과 같이 움직임)
-function drawGround() {
-  const y = celestialToScreen(0, 0, azimuth, elevation).py;   // 고도 0°의 화면 높이
-  if (y > canvas.height + 60) return;   // 지평선이 화면 아래로 충분히 내려가면 생략
+// 화면 = 우주 영역(위 80%, 움직임) + 지구 영역(아래 20%, 고정)
+const panelTop = () => canvas.height * HORIZON_STOP;
 
-  // 지평선 위 대기광
-  const air = ctx.createLinearGradient(0, y - 70, 0, y);
-  air.addColorStop(0, 'rgba(90,140,200,0)');
-  air.addColorStop(1, 'rgba(90,140,200,0.18)');
-  ctx.fillStyle = air;
-  ctx.fillRect(0, y - 70, canvas.width, 70);
+// 지구 영역: 화면에 고정. 뒤에서 움직이는 별·행성을 가리고 지구본을 그림
+function drawEarthPanel() {
+  const top = panelTop();
+  ctx.fillStyle = '#000508';
+  ctx.fillRect(0, top, canvas.width, canvas.height - top);
+  drawGlobe();
 
-  // 땅
-  const ground = ctx.createLinearGradient(0, y, 0, canvas.height);
-  ground.addColorStop(0, '#06111d');
-  ground.addColorStop(1, '#02060b');
-  ctx.fillStyle = ground;
-  ctx.fillRect(0, y, canvas.width, Math.max(0, canvas.height - y));
-
-  // 지평선 선
-  ctx.beginPath();
-  ctx.moveTo(0, y);
-  ctx.lineTo(canvas.width, y);
-  ctx.strokeStyle = 'rgba(180,220,255,0.35)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // 방위 표시 (북, 동, 남, 서)
+  // 방위 표시: 경계선 바로 위, 지금 보는 방향에 맞춰 좌우로만 이동
   ctx.font = '13px monospace';
   ctx.textAlign = 'center';
-  [['북', 0], ['동', 90], ['남', 180], ['서', 270]].forEach(([label, az]) => {
+  [['북', 0], ['북동', 45], ['동', 90], ['남동', 135], ['남', 180], ['남서', 225], ['서', 270], ['북서', 315]].forEach(([label, az]) => {
     const { px } = celestialToScreen(az, 0, azimuth, elevation);
     if (px < -20 || px > canvas.width + 20) return;
-    ctx.fillStyle = label === '북' ? 'rgba(255,122,107,0.9)' : 'rgba(180,220,255,0.6)';
-    ctx.fillText(label, px, y - 8);   // 지평선 바로 위 (아래는 지구본과 겹침)
+    const main = label.length === 1;
+    ctx.fillStyle = label === '북' ? 'rgba(255,122,107,0.9)'
+                  : main ? 'rgba(180,220,255,0.6)' : 'rgba(180,220,255,0.3)';
+    ctx.font = main ? '13px monospace' : '10px monospace';
+    ctx.fillText(label, px, top - 10);
   });
 }
 
@@ -783,11 +769,6 @@ function globeGeom() {
   const cx = canvas.width / 2;
   const cy = canvas.height + R - 2 * R * GLOBE_SHOW;
   return { R, cx, cy };
-}
-
-function isOnGlobe(x, y) {
-  const { R, cx, cy } = globeGeom();
-  return Math.hypot(x - cx, y - cy) < R;
 }
 
 // 정사영(orthographic) 투영: 지구를 멀리서 본 모습
@@ -921,7 +902,7 @@ function drawGlobe() {
 function drawSelection() {
   if (!selected) return;
   const t = hitTargets.find(h => h.name === selected.name);
-  if (!t) return;   // 화면 밖이거나 지평선 아래면 링 생략 (정보창은 유지)
+  if (!t || t.py > panelTop()) return;   // 화면 밖이거나 지평선 아래면 링 생략 (정보창은 유지)
   const pulse = 1 + 0.08 * Math.sin(performance.now() / 300);
   ctx.beginPath();
   // 링 크기 = 탭 범위 (보이는 원 안을 누르면 선택됨). 숨쉬기는 안쪽으로만
@@ -1045,9 +1026,8 @@ function draw() {
     }
   }
 
-  // 땅은 맨 마지막에: 지평선 아래 천체를 가림
-  drawGround();
-  drawGlobe();
+  // 지구 영역은 맨 마지막에: 화면 아래 20%에 고정, 뒤의 천체를 가림
+  drawEarthPanel();
   drawSelection();
   if (DEBUG_TAP) drawTapDebug();
 
