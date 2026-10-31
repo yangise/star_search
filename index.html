@@ -77,11 +77,11 @@
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
 // push 전에 반드시 false로!
 // =====================
-const TEST_MODE = false;
+const TEST_MODE = true;
 
 // 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
 // 범위 조절이 끝나면 false로!
-const DEBUG_TAP = false;
+const DEBUG_TAP = true;
 
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
@@ -738,6 +738,37 @@ function drawEarthPanel() {
   ctx.fillRect(0, top, canvas.width, canvas.height - top);
   drawGlobe();
 
+  // 경계선: 실제 지평선과 겹칠 때(지평선 쪽을 볼 때) 밝게 빛나고 '지평선' 표시
+  // 위를 볼 때는 실제 지평선이 지구 영역 뒤로 내려가므로 은은한 구분선으로만
+  const horizonY = celestialToScreen(0, 0, azimuth, elevation).py;
+  const onHorizon = 1 - Math.min(1, Math.max(0, (horizonY - top) / 60));
+
+  const glow = ctx.createLinearGradient(0, top - 24, 0, top);
+  glow.addColorStop(0, 'rgba(140,200,255,0)');
+  glow.addColorStop(1, `rgba(140,200,255,${0.25 * onHorizon})`);
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, top - 24, canvas.width, 24);
+
+  const lineGrad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  const a = 0.3 + 0.6 * onHorizon;
+  lineGrad.addColorStop(0, 'rgba(180,225,255,0)');
+  lineGrad.addColorStop(0.15, `rgba(180,225,255,${a})`);
+  lineGrad.addColorStop(0.85, `rgba(180,225,255,${a})`);
+  lineGrad.addColorStop(1, 'rgba(180,225,255,0)');
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  ctx.lineTo(canvas.width, top);
+  ctx.strokeStyle = lineGrad;
+  ctx.lineWidth = 1 + onHorizon;
+  ctx.stroke();
+
+  if (onHorizon > 0.05) {
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = `rgba(180,225,255,${0.7 * onHorizon})`;
+    ctx.fillText('지평선', 16, top + 14);
+  }
+
   // 방위 표시: 경계선 바로 위, 지금 보는 방향에 맞춰 좌우로만 이동
   ctx.font = '13px monospace';
   ctx.textAlign = 'center';
@@ -813,7 +844,11 @@ function buildGlobeImage(g) {
   const img = o.createImageData(size, size);
   const lat0 = toRad(userLat - globeLatShift()), lon0 = toRad(userLon);
   const s0 = Math.sin(lat0), c0 = Math.cos(lat0);
-  const sea = [24, 66, 112], ground = [63, 125, 106];
+  // 달과 같은 플랫 일러스트 색상
+  const SEA = [61, 124, 201], LAND_C = [140, 196, 122], ICE = [236, 243, 247], CLOUD = [255, 255, 255];
+  const mla = toRad(userLat), mlo = toRad(userLon);
+  const meX = Math.cos(mla) * Math.cos(mlo), meY = Math.cos(mla) * Math.sin(mlo), meZ = Math.sin(mla);
+  const smooth = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 
   const visibleRows = Math.min(size, Math.ceil(canvas.height - (g.cy - g.R)) + 1);   // 화면 밖 아래쪽은 계산 생략
   for (let py = 0; py < visibleRows; py++) {
@@ -828,10 +863,24 @@ function buildGlobeImage(g) {
       let v = Math.floor((90 - toDeg(lat)) / 180 * mh);
       v = Math.min(mh - 1, Math.max(0, v));
       const isLand = land[(v * mw + u) * 4] > 128;
-      const c = isLand ? ground : sea;
-      // 입체감: 왼쪽 위에서 빛이 오는 것처럼 + 가장자리 어둡게
-      const light = Math.max(0, -0.45 * x + 0.55 * y + 0.7 * z);
-      const k = 0.35 + 0.75 * light;
+      const latD = toDeg(lat);
+      // 극지방은 얼음 (바다는 75°, 육지는 66° 위부터), 경계는 부드럽게
+      const ice = smooth(isLand ? 62 : 72, isLand ? 70 : 80, Math.abs(latD));
+      let c = isLand ? LAND_C : SEA;
+      c = [0, 1, 2].map(j => c[j] + (ICE[j] - c[j]) * ice);
+
+      // 구름: 지구 표면에 붙은 무늬 (3차원 좌표로 만들어 이음매 없음)
+      const X = Math.cos(lat) * Math.cos(lon), Y = Math.cos(lat) * Math.sin(lon), Z = Math.sin(lat);
+      const n = Math.sin(13.1 * X + 4.3 * Z) * Math.sin(11.3 * Y - 3.7 * X)
+              + 0.6 * Math.sin(23.7 * Z + 8.1 * Y) * Math.sin(19.4 * X + 3.2)
+              + 0.35 * Math.sin(37.3 * Y + 15.7 * Z);
+      // 내 위치 주변(약 12°)은 구름이 비켜감
+      const dMe = Math.acos(Math.min(1, X * meX + Y * meY + Z * meZ));
+      const cloud = 0.8 * smooth(0.85, 1.05, n) * smooth(0.12, 0.25, dMe);
+      c = [0, 1, 2].map(j => c[j] + (CLOUD[j] - c[j]) * cloud);
+
+      // 플랫 스타일: 음영 대신 가장자리만 살짝 어둡게
+      const k = 0.78 + 0.22 * Math.sqrt(z);
       const i = (py * size + px) * 4;
       img.data[i]     = Math.min(255, c[0] * k);
       img.data[i + 1] = Math.min(255, c[1] * k);
@@ -848,8 +897,8 @@ function drawGlobe() {
 
   // 대기 빛
   const air = ctx.createRadialGradient(g.cx, g.cy, g.R * 0.95, g.cx, g.cy, g.R * 1.15);
-  air.addColorStop(0, 'rgba(110,170,240,0.35)');
-  air.addColorStop(1, 'rgba(110,170,240,0)');
+  air.addColorStop(0, 'rgba(140,200,255,0.45)');
+  air.addColorStop(1, 'rgba(140,200,255,0)');
   ctx.beginPath();
   ctx.arc(g.cx, g.cy, g.R * 1.15, 0, Math.PI * 2);
   ctx.fillStyle = air;
@@ -860,26 +909,12 @@ function drawGlobe() {
   if (!globeCache || globeCache.key !== key) globeCache = { key, img: buildGlobeImage(g) };
   ctx.drawImage(globeCache.img, g.cx - g.R, g.cy - g.R);
 
-  // 경위선 (30° 간격)
-  ctx.strokeStyle = 'rgba(180,220,255,0.15)';
-  ctx.lineWidth = 1;
-  const line = pts => {
-    ctx.beginPath();
-    let pen = false;
-    pts.forEach(([lo, la]) => {
-      const q = globeProject(lo, la, g);
-      if (!q.front) { pen = false; return; }
-      pen ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y);
-      pen = true;
-    });
-    ctx.stroke();
-  };
-  for (let lo = -180; lo < 180; lo += 30) {
-    const pts = []; for (let la = -90; la <= 90; la += 5) pts.push([lo, la]); line(pts);
-  }
-  for (let la = -60; la <= 60; la += 30) {
-    const pts = []; for (let lo = -180; lo <= 180; lo += 5) pts.push([lo, la]); line(pts);
-  }
+  // 대기권 테두리: 지구 가장자리를 따라 얇게 빛나는 선
+  ctx.beginPath();
+  ctx.arc(g.cx, g.cy, g.R + 1, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(170,220,255,0.7)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
 
   // 내 위치
   const me = globeProject(userLon, userLat, g);
@@ -895,7 +930,11 @@ function drawGlobe() {
   ctx.fillStyle = 'rgba(220,240,255,0.85)';
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(0,10,25,0.9)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(gpsReady ? '내 위치' : '서울(기본값)', me.x, me.y - 12);
+  ctx.shadowBlur = 0;
 }
 
 // 선택한 천체 주위에 천천히 숨쉬는 링
