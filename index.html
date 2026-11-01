@@ -103,6 +103,7 @@
 <!-- 데이터 파일: 코드(index.html)와 분리 -->
 <script src="data/land.js"></script>
 <script src="data/bg-stars.js"></script>
+<script src="data/milkyway.js"></script>
 <script src="data/constellations.js"></script>
 <script>
 // =====================
@@ -468,12 +469,23 @@ function applySensor() {
 const DIRS = ['북','북동','동','남동','남','남서','서','북서'];
 const dirName = az => DIRS[Math.round(normAz(az) / 45) % 8];
 
+// 초당 프레임 수 (DEBUG_TAP일 때 화면에 표시): 실제 폰에서 성능 확인용
+let fps = 0, fpsFrames = 0, fpsStart = performance.now();
+function countFps() {
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsStart >= 1000) { fps = Math.round(fpsFrames * 1000 / (now - fpsStart)); fpsFrames = 0; fpsStart = now; }
+}
+
 function updateHud() {
+  countFps();
   // 센서 원본 값 (DEBUG_TAP일 때만): alpha/beta/gamma = 폰 회전, heading = 나침반, acc = 나침반 오차(도)
   const sd = document.getElementById('sensorDebug');
-  if (DEBUG_TAP && rawSensor) {
+  if (DEBUG_TAP && !rawSensor) {
+    sd.textContent = `${fps} fps`;
+  } else if (DEBUG_TAP && rawSensor) {
     const f = v => (v === undefined || v === null) ? '-' : Math.round(v);
-    sd.textContent = `α ${f(rawSensor.a)}  β ${f(rawSensor.b)}  γ ${f(rawSensor.g)}\nheading ${f(rawSensor.h)}  오차 ±${f(rawSensor.acc)}°`;
+    sd.textContent = `${fps} fps\nα ${f(rawSensor.a)}  β ${f(rawSensor.b)}  γ ${f(rawSensor.g)}\nheading ${f(rawSensor.h)}  오차 ±${f(rawSensor.acc)}°`;
   } else {
     sd.textContent = '';
   }
@@ -1030,23 +1042,91 @@ function drawGlobe() {
 }
 
 // =====================
+// 은하수: 격자점마다 부드러운 빛 덩어리를 겹쳐 그려서 뿌옇게 번지는 띠를 만듦
+// =====================
+const MW_STRENGTH = 0.022;   // 진하기 (클수록 진함). 지저분하면 낮추기
+const MW_SPRITE = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(190,210,255,1)');
+  grad.addColorStop(0.4, 'rgba(190,210,255,0.45)');
+  grad.addColorStop(1, 'rgba(190,210,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return c;
+})();
+
+// 성능 최적화
+// 1) 위치 계산은 2초마다만 (은하수는 천천히 움직이니 매 프레임 계산할 필요 없음)
+// 2) 화면의 1/4 크기 작은 캔버스에 그린 뒤 확대해서 붙임 (뿌연 빛이라 티가 안 나고, 그리는 양은 1/16)
+// 3) 보는 방향이 바뀌었을 때만 다시 그림
+const MW_SCALE = 0.25;
+const mwLayer = document.createElement('canvas');
+const mwCtx = mwLayer.getContext('2d');
+let mwCache = null, mwCacheTime = 0, mwDrawnView = null;
+
+function drawMilkyWay() {
+  const now = performance.now();
+  let dirty = false;
+  if (!mwCache || now - mwCacheTime > 2000) {
+    mwCache = [];
+    for (let i = 0; i < MILKY_WAY.length; i += 3) {
+      const { alt, az } = raDecToAltAz(MILKY_WAY[i], MILKY_WAY[i + 1], userLat, userLon);
+      if (alt > -10) mwCache.push([az, alt, MILKY_WAY[i + 2]]);
+    }
+    mwCacheTime = now;
+    dirty = true;
+  }
+
+  const w = Math.ceil(canvas.width * MW_SCALE), h = Math.ceil(canvas.height * MW_SCALE);
+  const v = mwDrawnView;
+  if (dirty || !v || v.w !== w || v.h !== h ||
+      Math.abs(angDiff(azimuth, v.az)) > 0.15 || Math.abs(elevation - v.el) > 0.15) {
+    if (mwLayer.width !== w || mwLayer.height !== h) { mwLayer.width = w; mwLayer.height = h; }
+    mwCtx.clearRect(0, 0, w, h);
+    const size = canvas.height / 60 * 11 * MW_SCALE;   // 격자 간격(2°)보다 훨씬 크게 그려서 덩어리 경계가 안 보이게 섞음
+    mwCache.forEach(([az, alt, lv]) => {
+      const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
+      const x = px * MW_SCALE, y = py * MW_SCALE;
+      if (x < -size || x > w + size || y < -size || y > h + size) return;
+      mwCtx.globalAlpha = MW_STRENGTH * lv;
+      mwCtx.drawImage(MW_SPRITE, x - size / 2, y - size / 2, size, size);
+    });
+    mwDrawnView = { az: azimuth, el: elevation, w, h };
+  }
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(mwLayer, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
+// =====================
 // 배경 별 + 별자리
 // =====================
 // 이름 있는 별(STARS)과 겹치는 배경 별은 건너뜀 (두 번 그려져 더 밝아 보이는 것 방지)
 const NAMED_KEYS = new Set(STARS.map(st => st.ra.toFixed(1) + ',' + st.dec.toFixed(1)));
 
 function drawBgStars() {
-  for (let i = 0; i < BG_STARS.length; i += 3) {
-    const mag = BG_STARS[i + 2];
-    if (NAMED_KEYS.has(BG_STARS[i].toFixed(1) + ',' + BG_STARS[i + 1].toFixed(1))) continue;
-    const { alt, az } = raDecToAltAz(BG_STARS[i], BG_STARS[i + 1], userLat, userLon);
-    if (alt < -5) continue;
+  BG_STARS.forEach(([ra, dec, mag, label]) => {
+    if (NAMED_KEYS.has(ra.toFixed(1) + ',' + dec.toFixed(1))) return;
+    const { alt, az } = raDecToAltAz(ra, dec, userLat, userLon);
+    if (alt < -5) return;
     const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
-    if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) continue;
+    if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) return;
     const r = Math.max(0.5, 2.5 - mag * 0.45);
     const brightness = Math.max(0.25, 0.9 - (mag - 2.5) * 0.25);
     drawStar(px, py, r, brightness);
-  }
+
+    // 탭하면 정보 표시 (예: '페르세우스자리 δ · 3.0등급')
+    if (label && alt > 0) hitTargets.push({
+      name: label, kind: `별 · ${mag.toFixed(1)}등급`, px, py, hitR: 18, coreR: 6, ringR: 18,
+      getPos: () => raDecToAltAz(ra, dec, userLat, userLon),
+    });
+  });
 }
 
 // 별자리 표시 켜기/끄기 (선택은 이 브라우저에 기억)
@@ -1060,11 +1140,15 @@ constBtn.addEventListener('click', () => {
   try { localStorage.setItem('showConstellations', showConstellations ? '1' : '0'); } catch (e) {}
 });
 
+// 보여줄 별자리: rank 1(유명) ~ 3(덜 알려짐). 2면 88개 중 46개 (약 절반)
+const CONST_MAX_RANK = 2;
+
 function drawConstellations() {
   const W = canvas.width, H = canvas.height;
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(140,190,255,0.28)';
   CONSTELLATIONS.forEach(c => {
+    if (c.rank > CONST_MAX_RANK) return;
     let visible = false;
     c.lines.forEach(seg => {
       let prev = null;
@@ -1086,8 +1170,8 @@ function drawConstellations() {
       }
     });
 
-    // 이름: 유명한 별자리(rank 1, 2)만, 선이 보일 때
-    if (!visible || c.rank > 2) return;
+    // 이름: 선이 보일 때만
+    if (!visible) return;
     const { alt, az } = raDecToAltAz(c.label[0], c.label[1], userLat, userLon);
     if (alt < 0) return;
     const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
@@ -1163,6 +1247,7 @@ function draw() {
 
 
   // 배경 별(4.5등급까지, 점만) → 별자리 선 → 이름 있는 별 순서로 그림
+  drawMilkyWay();
   drawBgStars();
   if (showConstellations) drawConstellations();
 
@@ -1182,7 +1267,7 @@ function draw() {
 
     drawStar(px, py, r, brightness);
     if (alt > 0) hitTargets.push({
-      name: star.name, kind: star.ko ? `별 · ${star.ko}` : '별', px, py, hitR: 22, coreR: 8, ringR: 22,
+      name: star.name, kind: `별 · ${star.mag.toFixed(1)}등급` + (star.ko ? ` · ${star.ko}` : ''), px, py, hitR: 22, coreR: 8, ringR: 22,
       getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
     });
   });
