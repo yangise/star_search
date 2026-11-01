@@ -1053,65 +1053,137 @@ function drawGlobe() {
 }
 
 // =====================
-// 은하수: 격자점마다 부드러운 빛 덩어리를 겹쳐 그려서 뿌옇게 번지는 띠를 만듦
+// 은하수: 실제 은하수 사진처럼 보이도록 세 겹으로 그림
+//  1) 빛 구름: 격자점마다 부드러운 빛 덩어리. 은하 중심(궁수자리 쪽)은 따뜻한 색, 반대쪽은 푸른색
+//  2) 명암 대비: 밝기 단계를 제곱으로 키워 밝은 별구름과 어두운 부분이 뚜렷하게
+//  3) 별 알갱이: 띠 안에 희미한 작은 별 수천 개를 흩뿌려 반짝이는 질감
 // =====================
-const MW_STRENGTH = 0.022;   // 진하기 (클수록 진함). 지저분하면 낮추기
-const MW_SPRITE = (() => {
+const MW_STRENGTH = 0.024;   // 빛 구름 진하기
+const MW_GRAIN = 3200;       // 별 알갱이 개수
+const MW_GRAIN_ALPHA = 0.6;  // 별 알갱이 밝기
+
+// 적경/적위 → 은하 경도(l): 0°가 은하 중심(궁수자리)
+function galacticLon(raDeg, decDeg) {
+  const ra = toRad(raDeg), dec = toRad(decDeg);
+  const raGP = toRad(192.85948), decGP = toRad(27.12825), lNCP = 122.93192;
+  const y = Math.cos(dec) * Math.sin(ra - raGP);
+  const x = Math.sin(dec) * Math.cos(decGP) - Math.cos(dec) * Math.sin(decGP) * Math.cos(ra - raGP);
+  return normAz(lNCP - toDeg(Math.atan2(y, x)));
+}
+
+// 색이 다른 빛 덩어리 그림 8장 (따뜻한 색 → 푸른색)
+const MW_SPRITES = Array.from({ length: 8 }, (_, i) => {
+  const t = i / 7;   // 0 = 은하 중심(따뜻), 1 = 반대쪽(푸름)
+  const r = Math.round(255 - 70 * t), g = Math.round(222 - 12 * t), bl = Math.round(180 + 75 * t);
   const c = document.createElement('canvas');
   c.width = c.height = 64;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(190,210,255,1)');
-  grad.addColorStop(0.4, 'rgba(190,210,255,0.45)');
-  grad.addColorStop(1, 'rgba(190,210,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
+  const x = c.getContext('2d');
+  const grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, `rgba(${r},${g},${bl},1)`);
+  grad.addColorStop(0.4, `rgba(${r},${g},${bl},0.45)`);
+  grad.addColorStop(1, `rgba(${r},${g},${bl},0)`);
+  x.fillStyle = grad;
+  x.fillRect(0, 0, 64, 64);
   return c;
+});
+
+// 격자점마다 색과 밝기를 미리 계산 (한 번만)
+const MW_POINTS = [];
+for (let i = 0; i < MILKY_WAY.length; i += 3) {
+  const ra = MILKY_WAY[i], dec = MILKY_WAY[i + 1], lv = MILKY_WAY[i + 2];
+  const l = galacticLon(ra, dec);
+  const fromCenter = Math.min(l, 360 - l) / 180;            // 은하 중심에서 얼마나 먼지 0~1
+  const warm = Math.min(1, fromCenter * 2.2);               // 중심 근처만 따뜻하게
+  const coreBoost = 1 + 0.25 * Math.max(0, 1 - fromCenter * 4);   // 은하 중심 쪽은 조금 더 밝게
+  // 밝기 단계(1~5)에 따라 진하게, 단 너무 밝아 하얗게 날아가지 않도록 상한
+  MW_POINTS.push({ ra, dec, sprite: Math.round(warm * 7), alpha: Math.min(0.07, MW_STRENGTH * (0.6 + 0.4 * lv) * coreBoost) });
+}
+
+// 별 알갱이: 밝은 곳일수록 많이 뿌림. 매번 같은 모양이 나오게 고정된 난수 사용
+const MW_GRAIN_STARS = (() => {
+  let seed = 12345;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const weights = MW_POINTS.map(p => p.alpha);
+  const total = weights.reduce((a, b) => a + b, 0);
+  const out = [];
+  for (let n = 0; n < MW_GRAIN; n++) {
+    let pick = rand() * total, i = 0;
+    while (pick > weights[i]) { pick -= weights[i]; i++; }
+    const p = MW_POINTS[Math.min(i, MW_POINTS.length - 1)];
+    out.push({
+      ra: p.ra + (rand() - 0.5) * 2.2 / Math.max(0.2, Math.cos(toRad(p.dec))),
+      dec: p.dec + (rand() - 0.5) * 2.2,
+      a: MW_GRAIN_ALPHA * (0.25 + 0.75 * rand() * rand()),
+      warm: p.sprite < 3,
+    });
+  }
+  return out;
 })();
 
 // 성능 최적화
 // 1) 위치 계산은 2초마다만 (은하수는 천천히 움직이니 매 프레임 계산할 필요 없음)
-// 2) 화면의 1/4 크기 작은 캔버스에 그린 뒤 확대해서 붙임 (뿌연 빛이라 티가 안 나고, 그리는 양은 1/16)
-// 3) 보는 방향이 바뀌었을 때만 다시 그림
+// 2) 빛 구름은 화면의 1/4 크기 캔버스에 그린 뒤 확대 (뿌연 빛이라 티가 안 나고, 그리는 양은 1/16)
+// 3) 보는 방향이 바뀌었을 때만 다시 그리고, 가만히 있을 땐 그려둔 그림 재사용
 const MW_SCALE = 0.25;
 const mwLayer = document.createElement('canvas');
 const mwCtx = mwLayer.getContext('2d');
-let mwCache = null, mwCacheTime = 0, mwDrawnView = null;
+const grainLayer = document.createElement('canvas');
+const grainCtx = grainLayer.getContext('2d');
+let mwCache = null, grainCache = null, mwCacheTime = 0, mwDrawnView = null;
 
 function drawMilkyWay() {
   const now = performance.now();
   let dirty = false;
   if (!mwCache || now - mwCacheTime > 2000) {
     mwCache = [];
-    for (let i = 0; i < MILKY_WAY.length; i += 3) {
-      const { alt, az } = raDecToAltAz(MILKY_WAY[i], MILKY_WAY[i + 1], userLat, userLon);
-      if (alt > -10) mwCache.push([az, alt, MILKY_WAY[i + 2]]);
-    }
+    MW_POINTS.forEach(p => {
+      const { alt, az } = raDecToAltAz(p.ra, p.dec, userLat, userLon);
+      if (alt > -10) mwCache.push([az, alt, p]);
+    });
+    grainCache = [];
+    MW_GRAIN_STARS.forEach(g => {
+      const { alt, az } = raDecToAltAz(g.ra, g.dec, userLat, userLon);
+      if (alt > -5) grainCache.push([az, alt, g]);
+    });
     mwCacheTime = now;
     dirty = true;
   }
 
-  const w = Math.ceil(canvas.width * MW_SCALE), h = Math.ceil(canvas.height * MW_SCALE);
+  const W = canvas.width, H = canvas.height;
+  const w = Math.ceil(W * MW_SCALE), h = Math.ceil(H * MW_SCALE);
   const v = mwDrawnView;
-  if (dirty || !v || v.w !== w || v.h !== h ||
+  if (dirty || !v || v.W !== W || v.H !== H ||
       Math.abs(angDiff(azimuth, v.az)) > 0.15 || Math.abs(elevation - v.el) > 0.15) {
+    // 빛 구름 (작은 캔버스)
     if (mwLayer.width !== w || mwLayer.height !== h) { mwLayer.width = w; mwLayer.height = h; }
     mwCtx.clearRect(0, 0, w, h);
-    const size = canvas.height / 60 * 11 * MW_SCALE;   // 격자 간격(2°)보다 훨씬 크게 그려서 덩어리 경계가 안 보이게 섞음
-    mwCache.forEach(([az, alt, lv]) => {
+    const size = H / 60 * 11 * MW_SCALE;
+    mwCache.forEach(([az, alt, p]) => {
       const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
       const x = px * MW_SCALE, y = py * MW_SCALE;
       if (x < -size || x > w + size || y < -size || y > h + size) return;
-      mwCtx.globalAlpha = MW_STRENGTH * lv;
-      mwCtx.drawImage(MW_SPRITE, x - size / 2, y - size / 2, size, size);
+      mwCtx.globalAlpha = p.alpha;
+      mwCtx.drawImage(MW_SPRITES[p.sprite], x - size / 2, y - size / 2, size, size);
     });
-    mwDrawnView = { az: azimuth, el: elevation, w, h };
+
+    // 별 알갱이 (원래 크기 캔버스, 1~1.5px 점)
+    if (grainLayer.width !== W || grainLayer.height !== H) { grainLayer.width = W; grainLayer.height = H; }
+    grainCtx.clearRect(0, 0, W, H);
+    grainCache.forEach(([az, alt, g]) => {
+      const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
+      if (px < 0 || px > W || py < 0 || py > H) return;
+      grainCtx.fillStyle = g.warm ? `rgba(255,230,200,${g.a})` : `rgba(215,225,255,${g.a})`;
+      const s = g.a > MW_GRAIN_ALPHA * 0.6 ? 1.5 : 1;
+      grainCtx.fillRect(px, py, s, s);
+    });
+    mwDrawnView = { az: azimuth, el: elevation, W, H };
   }
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(mwLayer, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(mwLayer, 0, 0, W, H);
+  ctx.drawImage(grainLayer, 0, 0);
   ctx.restore();
 }
 
