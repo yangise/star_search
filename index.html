@@ -100,11 +100,22 @@
   <button id="constBtn">별자리</button>
   <button id="startBtn">🔭 하늘 보기</button>
 
-<!-- 데이터 파일: 코드(index.html)와 분리 -->
-<script src="data/land.js"></script>
-<script src="data/bg-stars.js"></script>
-<script src="data/milkyway.js"></script>
-<script src="data/constellations.js"></script>
+<!-- 오류가 나면 화면 아래에 빨갛게 표시 (폰에서는 개발자 도구를 볼 수 없어서) -->
+<div id="errBox" style="position:fixed;left:8px;right:8px;bottom:8px;z-index:99;display:none;
+  background:rgba(120,0,0,0.85);color:#fff;font:12px monospace;padding:8px;border-radius:6px;white-space:pre-wrap"></div>
+<script>
+window.addEventListener('error', e => {
+  const b = document.getElementById('errBox');
+  b.style.display = 'block';
+  b.textContent += `오류: ${e.message}\n위치: ${(e.filename || '').split('/').pop()} ${e.lineno}번째 줄\n`;
+});
+</script>
+<!-- 데이터 파일: 코드(index.html)와 분리
+     ?v=날짜 : 데이터 파일을 바꾸면 이 날짜도 바꿔야 폰 브라우저가 옛날 파일을 캐시에서 꺼내 쓰지 않음 -->
+<script src="data/land.js?v=20261101"></script>
+<script src="data/bg-stars.js?v=20261101"></script>
+<script src="data/milkyway.js?v=20261101"></script>
+<script src="data/constellations.js?v=20261101"></script>
 <script>
 // =====================
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
