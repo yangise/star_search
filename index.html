@@ -19,9 +19,11 @@
     display: none;
   }
   #infoName { font-size: 1rem; color: rgba(220,240,255,0.95); }
-  #infoKind { font-size: 0.7rem; opacity: 0.6; margin-left: 6px; }
+  #infoKind { display: block; font-size: 0.7rem; opacity: 0.6; margin-top: 2px; }
   #infoPos { font-size: 0.8rem; margin-top: 4px; opacity: 0.85; }
   #infoHint { font-size: 0.7rem; margin-top: 4px; opacity: 0.5; display: none; }
+  #info { max-width: min(calc(100vw - 160px), 320px); }   /* 오른쪽 버튼과 안 겹치게 */
+  #infoDesc { font-size: 0.75rem; margin-top: 6px; line-height: 1.45; opacity: 0.8; display: none; }
   #compass {
     position: fixed; top: 16px; right: 16px;
     width: 56px; height: 56px; padding: 0;
@@ -82,6 +84,7 @@
     <div id="info">
       <div><span id="infoName"></span><span id="infoKind"></span></div>
       <div id="infoPos"></div>
+      <div id="infoDesc"></div>
       <div id="infoHint"></div>
     </div>
     <span id="sensorDebug" style="font-size:0.7rem;opacity:0.7;white-space:pre"></span>
@@ -116,6 +119,7 @@ window.addEventListener('error', e => {
 <script src="data/bg-stars.js?v=20261101"></script>
 <script src="data/milkyway.js?v=20261101"></script>
 <script src="data/constellations.js?v=20261101"></script>
+<script src="data/deep-sky.js?v=20261101"></script>
 <script>
 // =====================
 // 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
@@ -379,7 +383,7 @@ function selectAt(x, y) {
     if (i >= 0) idx = (i + 1) % cands.length;
   }
   const t = cands[idx].t;
-  selected = { name: t.name, kind: t.kind, getPos: t.getPos, nearby: cands.length - 1 };
+  selected = { name: t.name, kind: t.kind, desc: t.desc, getPos: t.getPos, nearby: cands.length - 1 };
 }
 
 canvas.addEventListener('wheel', e => {
@@ -512,6 +516,9 @@ function updateHud() {
     document.getElementById('infoKind').textContent = selected.kind;
     document.getElementById('infoPos').textContent =
       `방위각 ${Math.round(normAz(p.az))}° (${dirName(p.az)}) · 고도 ${Math.round(p.alt)}°`;
+    const desc = document.getElementById('infoDesc');
+    desc.textContent = selected.desc || '';
+    desc.style.display = selected.desc ? 'block' : 'none';
     const hint = document.getElementById('infoHint');
     if (selected.nearby > 0) {
       hint.textContent = `근처에 ${selected.nearby}개 더 있어요 · 같은 곳을 다시 탭하면 전환`;
@@ -1265,6 +1272,69 @@ function drawConstellations() {
   });
 }
 
+// =====================
+// 은하·성운·성단: 종류별 아이콘 + 이름, 탭하면 거리와 설명
+// =====================
+const DSO_COLOR = {
+  galaxy:  '200,185,255',   // 은하: 연보라
+  nebula:  '255,150,190',   // 성운: 분홍 (수소가 내는 붉은빛 느낌)
+  cluster: '160,215,255',   // 성단: 하늘색
+};
+
+function drawDsoIcon(cat, x, y) {
+  const c = DSO_COLOR[cat];
+  ctx.save();
+  if (cat === 'galaxy') {
+    // 기울어진 타원 + 밝은 중심
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 12);
+    g.addColorStop(0, `rgba(${c},0.9)`);
+    g.addColorStop(1, `rgba(${c},0)`);
+    ctx.translate(x, y); ctx.rotate(-0.5); ctx.scale(1, 0.4);
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(${c},0.7)`; ctx.stroke();
+  } else if (cat === 'nebula') {
+    // 몽글몽글한 구름 세 덩어리
+    [[-3, -1, 8], [4, -2, 7], [0, 4, 7]].forEach(([dx, dy, r]) => {
+      const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      g.addColorStop(0, `rgba(${c},0.55)`);
+      g.addColorStop(1, `rgba(${c},0)`);
+      ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill();
+    });
+  } else {
+    // 성단: 점선 원 안에 작은 점들
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${c},0.75)`; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = `rgba(${c},0.95)`;
+    [[0, 0], [-4, -3], [4, -2], [-2, 4], [3, 4], [-5, 2]].forEach(([dx, dy]) => {
+      ctx.beginPath(); ctx.arc(x + dx, y + dy, 1, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  ctx.restore();
+}
+
+function drawDeepSky() {
+  DEEP_SKY.forEach(o => {
+    const { alt, az } = raDecToAltAz(o.ra, o.dec, userLat, userLon);
+    if (alt < -5) return;
+    const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
+    if (px < -30 || px > canvas.width + 30 || py < -30 || py > canvas.height + 30) return;
+    drawDsoIcon(o.cat, px, py);
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(${DSO_COLOR[o.cat]},0.75)`;
+    ctx.fillText(o.ko.replace(/ \(.*\)/, ''), px, py + 22);
+    if (alt > 0) hitTargets.push({
+      name: o.ko, kind: `${o.kind} · ${o.dist}`, desc: `${o.id} · ${o.desc}`,
+      px, py, hitR: 22, coreR: 12, ringR: 22,
+      getPos: () => raDecToAltAz(o.ra, o.dec, userLat, userLon),
+    });
+  });
+}
+
 // 선택한 천체 주위에 천천히 숨쉬는 링
 function drawSelection() {
   if (!selected) return;
@@ -1333,6 +1403,7 @@ function draw() {
   drawMilkyWay();
   drawBgStars();
   if (showConstellations) drawConstellations();
+  drawDeepSky();
 
   // 별 그리기
   STARS.forEach(star => {
