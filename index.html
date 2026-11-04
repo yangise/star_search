@@ -728,41 +728,40 @@ function drawStar(x, y, r, brightness, color = '255,255,255') {
   ctx.fill();
 }
 
+// 태양: 크림색 원 + 가는 선 광선 16개 (은하·성운·성단의 선 아이콘과 같은 스타일)
 function drawSunFlat(px, py) {
   const t = performance.now() / 1000;
 
   // 부드러운 빛
-  const glow = ctx.createRadialGradient(px, py, 0, px, py, 140);
-  glow.addColorStop(0, 'rgba(255,200,70,0.55)');
-  glow.addColorStop(0.35, 'rgba(255,170,50,0.18)');
-  glow.addColorStop(1, 'rgba(255,150,40,0)');
+  const glow = ctx.createRadialGradient(px, py, 0, px, py, 75);
+  glow.addColorStop(0, 'rgba(255,200,120,0.32)');
+  glow.addColorStop(1, 'rgba(255,200,120,0)');
   ctx.beginPath();
-  ctx.arc(px, py, 140, 0, Math.PI * 2);
+  ctx.arc(px, py, 75, 0, Math.PI * 2);
   ctx.fillStyle = glow;
   ctx.fill();
 
-  // 천천히 도는 광선 12개
+  // 천천히 도는 가는 광선 (긴 것과 짧은 것이 번갈아)
   ctx.save();
   ctx.translate(px, py);
-  ctx.rotate(t * 0.15);
-  ctx.strokeStyle = 'rgba(255,200,60,0.85)';
+  ctx.rotate(t * 0.08);
+  ctx.strokeStyle = 'rgba(255,215,150,0.75)';
+  ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
-  ctx.lineWidth = 5;
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const inner = 38;
-    const outer = i % 2 === 0 ? 62 : 52;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const outer = i % 2 ? 44 : 52;
     ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+    ctx.moveTo(Math.cos(a) * 34, Math.sin(a) * 34);
     ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
     ctx.stroke();
   }
   ctx.restore();
 
-  // 단색 원
+  // 크림색 원 (달과 같은 톤)
   ctx.beginPath();
-  ctx.arc(px, py, 28, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffc83d';
+  ctx.arc(px, py, 26, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffe2a8';
   ctx.fill();
 }
 
