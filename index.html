@@ -8,12 +8,12 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000508; width: 100%; height: 100vh; overflow: hidden; touch-action: none; overscroll-behavior: none; }
   #sky { display: block; }   /* 캔버스를 inline 대신 block으로: 위치 어긋남 방지 */
-  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; }
+  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; text-shadow: 0 0 4px rgba(0,10,25,0.9); }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
   #coords { font-size: 0.75rem; opacity: 0.6; }
   #info {
     margin-top: 8px; padding: 8px 12px;
-    background: rgba(180,220,255,0.08);
+    background: rgba(5,15,30,0.6);
     border: 1px solid rgba(180,220,255,0.25);
     border-radius: 8px;
     display: none;
@@ -28,18 +28,18 @@
     position: fixed; top: 16px; right: 16px;
     width: 56px; height: 56px; padding: 0;
     border-radius: 50%;
-    background: rgba(180,220,255,0.08);
+    background: rgba(5,15,30,0.45);
     border: 1.5px solid rgba(180,220,255,0.7);
     cursor: pointer;
     transition: border-color 0.3s, background 0.3s;
   }
   #compass svg { width: 100%; height: 100%; display: block; }
-  #compass.free { border-color: rgba(180,220,255,0.2); background: rgba(180,220,255,0.03); }
+  #compass.free { border-color: rgba(180,220,255,0.2); background: rgba(5,15,30,0.3); }
   /* 모드 전환: [AR | 자유] 중 지금 모드가 밝게 */
   #modeBtn {
     position: fixed; top: 82px; right: 16px;
     display: flex; padding: 2px; border-radius: 14px;
-    background: rgba(180,220,255,0.06);
+    background: rgba(5,15,30,0.45);
     border: 1px solid rgba(180,220,255,0.4);
     font-family: monospace; font-size: 0.75rem;
     cursor: pointer;
@@ -53,13 +53,24 @@
   #constBtn {
     position: fixed; top: 120px; right: 16px;
     padding: 6px 12px; border-radius: 14px;
-    background: rgba(180,220,255,0.08);
+    background: rgba(5,15,30,0.45);
     border: 1px solid rgba(180,220,255,0.5);
     color: rgba(200,230,255,0.9);
     font-family: monospace; font-size: 0.75rem;
     cursor: pointer;
   }
   #constBtn.off { opacity: 0.4; }
+  /* 낮에만 나타나는 버튼: 실제 하늘 ↔ 밤하늘 */
+  #skyBtn {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    display: none; white-space: nowrap;
+    padding: 7px 14px; border-radius: 16px;
+    background: rgba(5,15,30,0.6);
+    border: 1px solid rgba(180,220,255,0.5);
+    color: rgba(220,238,255,0.95);
+    font-family: monospace; font-size: 0.75rem;
+    cursor: pointer;
+  }
   #startBtn {
     position: fixed;
     top: 50%; left: 50%;
@@ -101,6 +112,7 @@
   </button>
   <button id="modeBtn" aria-label="AR 모드와 자유 모드 전환"><span id="modeAR">AR</span><span id="modeFree">자유</span></button>
   <button id="constBtn">별자리</button>
+  <button id="skyBtn"></button>
   <button id="startBtn">🔭 하늘 보기</button>
 
 <!-- 오류가 나면 화면 아래에 빨갛게 표시 (폰에서는 개발자 도구를 볼 수 없어서) -->
@@ -371,7 +383,7 @@ function selectAt(x, y) {
   if (y > panelTop()) return;   // 지구 영역을 누르면 무시 (선택 유지)
   const cands = hitTargets
     .map(t => ({ t, d: Math.hypot(t.px - x, t.py - y) }))
-    .filter(c => c.d < c.t.hitR && c.t.py < panelTop())   // 지구 영역 뒤에 가려진 천체는 제외
+    .filter(c => c.d < c.t.hitR && c.t.py < panelTop() && (c.t.vis === undefined || c.t.vis > 0.15))   // 지구 영역 뒤·밝은 하늘에 안 보이는 천체 제외
     .sort((a, b) => ((a.d > a.t.coreR) - (b.d > b.t.coreR)) || (a.d - b.d));
 
   // 빈 하늘을 탭하면 선택 해제
@@ -807,10 +819,10 @@ function drawMoonFlat(px, py, r, illumination, waning) {
   };
 
   path();
-  ctx.fillStyle = 'rgba(0,5,12,0.88)';
+  ctx.fillStyle = `rgba(${moonShadow},0.88)`;
   ctx.fill();
   // 경계 번짐: 굵기를 키우며 옅게 여러 번 덧칠
-  ctx.strokeStyle = 'rgba(0,5,12,0.12)';
+  ctx.strokeStyle = `rgba(${moonShadow},0.12)`;
   for (let w = 3; w <= 15; w += 3) {
     ctx.lineWidth = w;
     path();
@@ -1390,6 +1402,61 @@ const PLANET_STYLE = [
 ];
 
 // =====================
+// 낮과 밤
+// 태양 고도로 '낮 정도'(0 = 밤, 1 = 낮)를 계산해 하늘색과 별 밝기를 조절
+//  - 태양 고도 -12° 아래: 완전한 밤 / -12° ~ 3°: 박명(해질녘·새벽) / 3° 위: 낮
+// 낮에는 실제 하늘(별 안 보임)이 기본이고, 버튼으로 밤하늘 모드를 켤 수 있음
+// =====================
+let viewMode = 'real';   // 'real' = 실제 하늘, 'night' = 낮에도 밤하늘로 보기
+let skyDay = 0;          // 실제 하늘 기준 낮 정도 (0~1)
+let skyShow = 0;         // 화면에 적용할 낮 정도 (밤하늘 모드면 0)
+let moonShadow = '0,5,12';
+
+const smoothT = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+const mixRGB = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+
+function updateSky(sunAlt) {
+  skyDay = smoothT(-12, 3, sunAlt);
+  if (skyDay < 0.05) viewMode = 'real';   // 해가 지면 다음 낮을 위해 원래대로
+  skyShow = viewMode === 'night' ? 0 : skyDay;
+  const mid = mixRGB([0, 5, 12], [70, 125, 190], skyShow);
+  moonShadow = mid.join(',');
+
+  const btn = document.getElementById('skyBtn');
+  if (skyDay > 0.35) {
+    btn.style.display = 'block';
+    btn.style.top = (panelTop() - 64) + 'px';
+    const why = sunAlt > 0 ? '☀ 지금은 낮이라 별이 안 보여요' : '🌅 하늘이 아직 밝아 별이 잘 안 보여요';
+    btn.textContent = viewMode === 'real'
+      ? `${why} · 밤하늘로 보기`
+      : '🌙 밤하늘 모드 · 실제 하늘로 보기';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+document.getElementById('skyBtn').addEventListener('click', () => {
+  viewMode = viewMode === 'real' ? 'night' : 'real';
+});
+
+// 하늘 배경: 위쪽은 짙게, 지평선 쪽은 밝게. 해질녘엔 지평선이 노을빛
+function drawSkyBackground(sunAlt) {
+  const top = panelTop();
+  const d = skyShow;
+  // 노을: 태양 고도 -2° 근처에서 가장 진하고, 위아래 8°까지 서서히
+  const dusk = viewMode === 'real' ? Math.max(0, 1 - Math.abs(sunAlt + 2) / 8) : 0;
+  const zenith = mixRGB([0, 5, 8], [45, 105, 180], d);
+  let horizon = mixRGB([0, 5, 8], [150, 195, 235], d);
+  horizon = mixRGB(horizon, [230, 135, 85], dusk * 0.75);
+  const g = ctx.createLinearGradient(0, 0, 0, top);
+  g.addColorStop(0, `rgb(${zenith})`);
+  g.addColorStop(0.6, `rgb(${mixRGB(zenith, horizon, 0.45)})`);
+  g.addColorStop(1, `rgb(${horizon})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, top);
+}
+
+// =====================
 // 8. 메인 루프
 // =====================
 function draw() {
@@ -1406,15 +1473,30 @@ function draw() {
   updateHud();
   hitTargets = [];   // 이번 프레임에 탭할 수 있는 천체 목록
 
+  // 태양 위치로 낮/밤 판단 → 하늘 배경
+  const sun = getSunPosition(userLat, userLon);
+  if (TEST_MODE) { sun.alt = TEST_POS.sun.alt; sun.az = TEST_POS.sun.az; }
+  updateSky(sun.alt);
+  drawSkyBackground(sun.alt);
+
+  // 별이 보이는 정도: 밝은 하늘일수록 흐려짐 (은하수는 더 빨리 사라짐)
+  const starVis = 1 - skyShow;
+  const markVis = (from, vis) => { for (let i = from; i < hitTargets.length; i++) hitTargets[i].vis = vis; };
+  let n0;
 
   // 배경 별(4.5등급까지, 점만) → 별자리 선 → 이름 있는 별 순서로 그림
-  drawMilkyWay();
-  drawBgStars();
-  if (showConstellations) drawConstellations();
-  drawDeepSky();
+  ctx.globalAlpha = starVis * starVis;
+  if (ctx.globalAlpha > 0.01) drawMilkyWay();
+  ctx.globalAlpha = starVis;
+  n0 = hitTargets.length;
+  if (starVis > 0.01) {
+    drawBgStars();
+    if (showConstellations) drawConstellations();
+    drawDeepSky();
+  }
 
   // 별 그리기
-  STARS.forEach(star => {
+  if (starVis > 0.01) STARS.forEach(star => {
     const { alt, az } = raDecToAltAz(star.ra, star.dec, userLat, userLon);
     if (alt < -10) return; // 지평선 아래 10도 이상은 생략
 
@@ -1433,24 +1515,28 @@ function draw() {
       getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
     });
   });
+  markVis(n0, starVis);
+  ctx.globalAlpha = 1;
 
-  // 행성 그리기
+  // 행성 그리기 (금성은 아주 밝아서 낮에도 희미하게 보임)
   PLANET_STYLE.forEach(pl => {
     const pos = getPlanetPosition(pl.key, userLat, userLon);
     if (TEST_MODE) { pos.alt = TEST_POS[pl.key].alt; pos.az = TEST_POS[pl.key].az; }
     if (pos.alt < -10) return;
     const { px, py } = celestialToScreen(pos.az, pos.alt, azimuth, elevation);
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
+    const vis = pl.key === 'venus' ? Math.max(starVis, 0.6) : starVis;
+    if (vis < 0.02) return;
+    ctx.globalAlpha = vis;
     drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring);
-    if (pos.alt > 0) hitTargets.push({
+    ctx.globalAlpha = 1;
+    if (pos.alt > 0) hitTargets.push({ vis,
       name: pl.label, kind: '행성', px, py, hitR: Math.max(22, pl.r * 3.5), coreR: pl.r + 6, ringR: Math.max(22, pl.r * 3.5),
       getPos: () => TEST_MODE ? { ...TEST_POS[pl.key] } : getPlanetPosition(pl.key, userLat, userLon),
     });
   });
 
-  // 태양 그리기
-  const sun = getSunPosition(userLat, userLon);
-  if (TEST_MODE) { sun.alt = TEST_POS.sun.alt; sun.az = TEST_POS.sun.az; }
+  // 태양 그리기 (위치는 위에서 계산)
   if (sun.alt > -10) {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
