@@ -1230,7 +1230,7 @@ function drawBgStars() {
     if (px < -10 || px > canvas.width + 10 || py < -10 || py > canvas.height + 10) return;
     const r = Math.max(0.5, 2.5 - mag * 0.45);
     const brightness = Math.max(0.25, 0.9 - (mag - 2.5) * 0.25);
-    withHighlight(label, px, py, 14, 2.2, () => drawStar(px, py, r, brightness));
+    drawStar(px, py, r, brightness);
 
     // 탭하면 정보 표시 (예: '페르세우스자리 δ · 3.0등급')
     if (label && alt > 0) hitTargets.push({
@@ -1351,7 +1351,7 @@ function drawDeepSky() {
     if (alt < -5) return;
     const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
     if (px < -30 || px > canvas.width + 30 || py < -30 || py > canvas.height + 30) return;
-    withHighlight(o.ko, px, py, 26, 1.45, () => drawDsoIcon(o.cat, px, py));
+    drawDsoIcon(o.cat, px, py);
     ctx.font = '10px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = `rgba(${DSO_COLOR[o.cat]},0.75)`;
@@ -1463,11 +1463,8 @@ function drawMeteorRadiants() {
 
     // 유성 줄기 5개: 복사점에서 사방으로 뻗어 나가며 천천히 흘러감 (꼬리는 옅고 머리는 밝게)
     const t = performance.now() / 1000;
-    const sel = selected && selected.name === sh.ko;
-    if (sel) drawHighlightGlow(px, py, 34);
     ctx.save();
     ctx.translate(px, py);
-    if (sel) ctx.scale(1.35, 1.35);   // 선택되면 크게
     ctx.lineCap = 'round';
     [[-2.3, 26, 0.0], [-0.9, 22, 0.35], [0.5, 28, 0.7], [1.7, 20, 0.15], [2.8, 24, 0.55]].forEach(([ang, len, phase]) => {
       const k = (t * 0.35 + phase) % 1;              // 0→1 흐름
@@ -1501,29 +1498,17 @@ function drawMeteorRadiants() {
 }
 
 // 선택한 천체 주위에 천천히 숨쉬는 링
-// 선택한 천체 강조: 아이콘을 크게 그리고 뒤에 밝은 빛을 깔아줌 (따로 테두리를 그리지 않음)
-function drawHighlightGlow(px, py, r) {
-  const pulse = 0.85 + 0.15 * Math.sin(performance.now() / 350);
-  const g = ctx.createRadialGradient(px, py, 0, px, py, r * pulse);
-  g.addColorStop(0, 'rgba(210,235,255,0.45)');
-  g.addColorStop(0.5, 'rgba(180,220,255,0.15)');
-  g.addColorStop(1, 'rgba(180,220,255,0)');
+// 선택 표시: 천체 주위에 하늘색 원이 천천히 숨쉬듯 (크기 = 탭 범위)
+function drawSelection() {
+  if (!selected) return;
+  const t = hitTargets.find(h => h.name === selected.name);
+  if (!t || t.py > panelTop()) return;   // 화면 밖이거나 지평선 아래면 링 생략 (정보창은 유지)
+  const pulse = 1 + 0.08 * Math.sin(performance.now() / 300);
   ctx.beginPath();
-  ctx.arc(px, py, r * pulse, 0, Math.PI * 2);
-  ctx.fillStyle = g;
-  ctx.fill();
-}
-
-// name이 선택된 천체면 glowR 크기의 빛 + scale배 확대해서 그림, 아니면 그대로 그림
-function withHighlight(name, px, py, glowR, scale, drawFn) {
-  if (!selected || !name || selected.name !== name) return drawFn();
-  drawHighlightGlow(px, py, glowR);
-  ctx.save();
-  ctx.translate(px, py);
-  ctx.scale(scale, scale);
-  ctx.translate(-px, -py);
-  drawFn();
-  ctx.restore();
+  ctx.arc(t.px, t.py, t.ringR * (pulse - 0.08), 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(180,220,255,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 }
 
 // 탭 범위 디버그 표시
@@ -1667,7 +1652,7 @@ function draw() {
     const r = Math.max(0.5, 2.5 - star.mag * 0.5);
     const brightness = Math.max(0.3, 1.0 - star.mag * 0.1);
 
-    withHighlight(star.name, px, py, 16, 1.9, () => drawStar(px, py, r, brightness));
+    drawStar(px, py, r, brightness);
     if (alt > 0) hitTargets.push({
       name: star.name, kind: `별 · ${star.mag.toFixed(1)}등급` + (star.ko ? ` · ${star.ko}` : ''), px, py, hitR: 22, coreR: 8, ringR: 22,
       getPos: () => raDecToAltAz(star.ra, star.dec, userLat, userLon),
@@ -1686,7 +1671,7 @@ function draw() {
     const vis = pl.key === 'venus' ? Math.max(starVis, 0.6) : starVis;
     if (vis < 0.02) return;
     ctx.globalAlpha = vis;
-    withHighlight(pl.label, px, py, 24, 1.5, () => drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring));
+    drawPlanetFlat(px, py, pl.r, pl.color, pl.glow, pl.label, pl.ring);
     ctx.globalAlpha = 1;
     if (pos.alt > 0) hitTargets.push({ vis,
       name: pl.label, kind: '행성', px, py, hitR: Math.max(22, pl.r * 3.5), coreR: pl.r + 6, ringR: Math.max(22, pl.r * 3.5),
@@ -1698,7 +1683,7 @@ function draw() {
   if (sun.alt > -10) {
     const { px, py } = celestialToScreen(sun.az, sun.alt, azimuth, elevation);
     if (px > -150 && px < canvas.width + 150 && py > -150 && py < canvas.height + 150) {
-      withHighlight('태양', px, py, 60, 1.15, () => drawSunFlat(px, py));
+      drawSunFlat(px, py);
       if (sun.alt > 0) hitTargets.push({
         name: '태양', kind: '항성', px, py, hitR: 55, coreR: 30, ringR: 55,
         getPos: () => TEST_MODE ? { ...TEST_POS.sun } : getSunPosition(userLat, userLon),
@@ -1713,7 +1698,7 @@ function draw() {
     const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
     if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
       const { illumination, waning } = getMoonPhase();
-      withHighlight('달', px, py, 45, 1.2, () => drawMoonFlat(px, py, 30, illumination, waning));
+      drawMoonFlat(px, py, 30, illumination, waning);
       if (moon.alt > 0) hitTargets.push({
         name: '달', kind: '위성', px, py, hitR: 45, coreR: 30, ringR: 45,
         getPos: () => TEST_MODE ? { ...TEST_POS.moon } : getMoonPosition(userLat, userLon),
@@ -1723,7 +1708,7 @@ function draw() {
 
   // 지구 영역은 맨 마지막에: 화면 아래 20%에 고정, 뒤의 천체를 가림
   drawEarthPanel();
-  // 선택 표시는 각 천체를 그릴 때 직접 (withHighlight: 크고 밝게)
+  drawSelection();
   if (DEBUG_TAP) drawTapDebug();
 
   requestAnimationFrame(draw);
