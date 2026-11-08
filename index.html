@@ -9,7 +9,8 @@
   body { background: #000508; width: 100%; height: 100vh; overflow: hidden; touch-action: none; overscroll-behavior: none; }
   /* 캔버스를 화면에 고정: 주소창이 줄었다 늘어도 캔버스 위치가 흔들리지 않게 */
   #sky { display: block; position: fixed; left: 0; top: 0; }
-  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; text-shadow: 0 0 4px rgba(0,10,25,0.9); }
+  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; text-shadow: 0 0 4px rgba(0,10,25,0.9);
+    pointer-events: none;   /* 글자·정보창이 뒤의 천체를 가려도 탭은 하늘로 통과 */ }
   #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
   #coords { font-size: 0.75rem; opacity: 0.6; }
   /* 유성우 알림: 누르면 복사점으로 화면 이동 */
@@ -20,6 +21,7 @@
     border: 1px solid rgba(255,225,150,0.55);
     color: rgba(255,232,180,0.95);
     font-size: 0.72rem; cursor: pointer;
+    pointer-events: auto;   /* HUD 중 유성우 알림만 눌림 */
   }
   #info {
     margin-top: 8px; padding: 8px 12px;
@@ -31,7 +33,7 @@
   #infoName { font-size: 1rem; color: rgba(220,240,255,0.95); }
   #infoKind { display: block; font-size: 0.7rem; opacity: 0.6; margin-top: 2px; }
   #infoPos { font-size: 0.8rem; margin-top: 4px; opacity: 0.85; }
-  #infoHint { font-size: 0.7rem; margin-top: 4px; opacity: 0.5; display: none; }
+  #infoHint { font-size: 0.7rem; margin-top: 6px; opacity: 0.65; display: none; white-space: pre-line; line-height: 1.5; }
   #info { max-width: min(calc(100vw - 160px), 320px); }   /* 오른쪽 버튼과 안 겹치게 */
   #infoDesc { font-size: 0.75rem; margin-top: 6px; line-height: 1.45; opacity: 0.8; display: none; }
   #compass {
@@ -153,7 +155,7 @@ const TEST_MODE = false;
 
 // 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
 // 범위 조절이 끝나면 false로!
-const DEBUG_TAP = true;
+const DEBUG_TAP = false;
 
 const TEST_POS = {
   sun:     { alt: 60, az: 90 },
@@ -395,7 +397,7 @@ canvas.addEventListener('pointercancel', endDrag);
 // hitTargets: 이번 프레임에 화면에 그려진 천체 목록 (draw에서 채움)
 // =====================
 let hitTargets = [];
-let selected = null;   // { name, kind, getPos, nearby }
+let selected = null;   // { name, kind, desc, getPos, stack: 겹친 천체 이름 목록, idx: 지금 몇 번째 }
 
 // hitR: 탭 인정 범위 (= 선택 링 크기 ringR과 같게 맞춤), coreR: 실제로 그려진 몸체 크기
 // 1) 몸체 위를 정확히 탭했으면 그 천체가 최우선
@@ -420,7 +422,7 @@ function selectAt(x, y) {
     if (i >= 0) idx = (i + 1) % cands.length;
   }
   const t = cands[idx].t;
-  selected = { name: t.name, kind: t.kind, desc: t.desc, getPos: t.getPos, nearby: cands.length - 1 };
+  selected = { name: t.name, kind: t.kind, desc: t.desc, getPos: t.getPos, stack: cands.map(c => c.t.name), idx };
 }
 
 canvas.addEventListener('wheel', e => {
@@ -557,8 +559,10 @@ function updateHud() {
     desc.textContent = selected.desc || '';
     desc.style.display = selected.desc ? 'block' : 'none';
     const hint = document.getElementById('infoHint');
-    if (selected.nearby > 0) {
-      hint.textContent = `근처에 ${selected.nearby}개 더 있어요 · 같은 곳을 다시 탭하면 전환`;
+    const n = selected.stack ? selected.stack.length : 1;
+    if (n > 1) {
+      const next = selected.stack[(selected.idx + 1) % n];
+      hint.textContent = `탭한 자리에 천체 ${n}개가 겹쳐 있어요 (${selected.idx + 1}/${n})\n한 번 더 탭하면 → ${next}`;
       hint.style.display = 'block';
     } else {
       hint.style.display = 'none';
@@ -1458,7 +1462,7 @@ document.getElementById('meteorBanner').addEventListener('click', () => {
   const { sh, st } = featured;
   const info = showerInfo(sh, st);
   const pos = info.getPos();
-  selected = { ...info, nearby: 0 };
+  selected = { ...info };
   if (pos.alt < 0) selected.desc = `지금은 지평선 아래에 있어요 (고도 ${Math.round(pos.alt)}°). ` + selected.desc;
   followCompass = false;
   targetAz = normAz(pos.az);
