@@ -405,24 +405,41 @@ let selected = null;   // { name, kind, desc, getPos, stack: 겹친 천체 이�
 // 3) 후보가 여럿이면 같은 자리를 다시 탭할 때마다 다음 후보로 넘어감
 let lastTap = null;   // DEBUG_TAP용: 마지막 탭 위치
 
+// 겹친 천체 목록 고정: 처음 탭한 자리의 목록을 저장해두고,
+// 그 근처(STACK_RADIUS 안)를 다시 누르면 손가락 위치가 조금 달라도 저장한 순서대로 넘어감
+const STACK_RADIUS = 30;
+let stackAnchor = null;   // 처음 탭한 위치 { x, y }
+
 function selectAt(x, y) {
   lastTap = { x, y, t: performance.now() };
   if (y > panelTop()) return;   // 지구 영역을 누르면 무시 (선택 유지)
+
+  const pick = (t, stack, idx) => {
+    selected = { name: t.name, kind: t.kind, desc: t.desc, getPos: t.getPos, stack, idx };
+  };
+
+  // 1) 같은 자리를 다시 탭: 저장한 목록에서 다음 천체로
+  if (selected && selected.stack && selected.stack.length > 1 && stackAnchor &&
+      Math.hypot(x - stackAnchor.x, y - stackAnchor.y) < STACK_RADIUS) {
+    const n = selected.stack.length;
+    for (let step = 1; step <= n; step++) {
+      const idx = (selected.idx + step) % n;
+      const t = hitTargets.find(h => h.name === selected.stack[idx] && (h.vis === undefined || h.vis > 0.15));
+      if (t) { pick(t, selected.stack, idx); return; }
+    }
+  }
+
+  // 2) 새 자리 탭: 겹친 천체 목록을 새로 만듦 (몸체 위를 정확히 누른 것 우선, 그다음 가까운 순)
   const cands = hitTargets
     .map(t => ({ t, d: Math.hypot(t.px - x, t.py - y) }))
     .filter(c => c.d < c.t.hitR && c.t.py < panelTop() && (c.t.vis === undefined || c.t.vis > 0.15))   // 지구 영역 뒤·밝은 하늘에 안 보이는 천체 제외
     .sort((a, b) => ((a.d > a.t.coreR) - (b.d > b.t.coreR)) || (a.d - b.d));
 
   // 빈 하늘을 탭하면 선택 해제
-  if (cands.length === 0) { selected = null; return; }
+  if (cands.length === 0) { selected = null; stackAnchor = null; return; }
 
-  let idx = 0;
-  if (selected) {
-    const i = cands.findIndex(c => c.t.name === selected.name);
-    if (i >= 0) idx = (i + 1) % cands.length;
-  }
-  const t = cands[idx].t;
-  selected = { name: t.name, kind: t.kind, desc: t.desc, getPos: t.getPos, stack: cands.map(c => c.t.name), idx };
+  stackAnchor = { x, y };
+  pick(cands[0].t, cands.map(c => c.t.name), 0);
 }
 
 canvas.addEventListener('wheel', e => {
@@ -1463,6 +1480,7 @@ document.getElementById('meteorBanner').addEventListener('click', () => {
   const info = showerInfo(sh, st);
   const pos = info.getPos();
   selected = { ...info };
+  stackAnchor = null;
   if (pos.alt < 0) selected.desc = `지금은 지평선 아래에 있어요 (고도 ${Math.round(pos.alt)}°). ` + selected.desc;
   followCompass = false;
   targetAz = normAz(pos.az);
