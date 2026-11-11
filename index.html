@@ -4,14 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>별 어디있니</title>
+  <!-- 글꼴: Pretendard (SIL Open Font License 1.1) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --font: "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  body, button { font-family: var(--font); }
+  /* 방위각·고도 숫자가 바뀔 때 글자 폭이 흔들리지 않게 */
+  #hud, #info { font-variant-numeric: tabular-nums; }
   body { background: #000508; width: 100%; height: 100vh; overflow: hidden; touch-action: none; overscroll-behavior: none; }
   /* 캔버스를 화면에 고정: 주소창이 줄었다 늘어도 캔버스 위치가 흔들리지 않게 */
   #sky { display: block; position: fixed; left: 0; top: 0; }
-  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); font-family: monospace; display: flex; flex-direction: column; gap: 4px; text-shadow: 0 0 4px rgba(0,10,25,0.9);
+  #hud { position: fixed; top: 20px; left: 20px; color: rgba(180,220,255,0.8); display: flex; flex-direction: column; gap: 4px; text-shadow: 0 0 4px rgba(0,10,25,0.9);
     pointer-events: none;   /* 글자·정보창이 뒤의 천체를 가려도 탭은 하늘로 통과 */ }
-  #dir { font-size: 1.4rem; font-weight: 300; letter-spacing: 0.2em; }
+  #dir { font-size: 1.6rem; font-weight: 600; letter-spacing: 0.02em; color: rgba(225,240,255,0.95); }
   #coords { font-size: 0.75rem; opacity: 0.6; }
   /* 유성우 알림: 누르면 복사점으로 화면 이동 */
   #meteorBanner {
@@ -53,7 +59,7 @@
     display: flex; padding: 2px; border-radius: 14px;
     background: rgba(5,15,30,0.45);
     border: 1px solid rgba(180,220,255,0.4);
-    font-family: monospace; font-size: 0.75rem;
+    font-size: 0.75rem;
     cursor: pointer;
   }
   #modeBtn span {
@@ -68,7 +74,7 @@
     background: rgba(5,15,30,0.45);
     border: 1px solid rgba(180,220,255,0.5);
     color: rgba(200,230,255,0.9);
-    font-family: monospace; font-size: 0.75rem;
+    font-size: 0.75rem;
     cursor: pointer;
   }
   #constBtn.off { opacity: 0.4; }
@@ -80,7 +86,7 @@
     background: rgba(5,15,30,0.6);
     border: 1px solid rgba(180,220,255,0.5);
     color: rgba(220,238,255,0.95);
-    font-family: monospace; font-size: 0.75rem;
+    font-size: 0.75rem;
     cursor: pointer;
   }
   #startBtn {
@@ -90,12 +96,10 @@
     background: rgba(180,220,255,0.15);
     color: rgba(180,220,255,0.9);
     border: 1px solid rgba(180,220,255,0.4);
-    font-family: monospace;
     font-size: 1rem;
     padding: 14px 28px;
     border-radius: 8px;
     cursor: pointer;
-    letter-spacing: 0.1em;
   }
   </style>
 </head>
@@ -118,7 +122,7 @@
       <g id="needle" transform="rotate(0 28 28)">
         <polygon points="28,9 33,28 23,28" fill="#ff7a6b"/>
         <polygon points="28,47 33,28 23,28" fill="rgba(180,220,255,0.45)"/>
-        <text x="28" y="8" fill="#ff7a6b" font-size="7" font-family="monospace" text-anchor="middle">N</text>
+        <text x="28" y="8" fill="#ff7a6b" font-size="7" font-family="Pretendard Variable, sans-serif" font-weight="700" text-anchor="middle">N</text>
       </g>
       <circle cx="28" cy="28" r="2.5" fill="#cfe6ff"/>
     </svg>
@@ -130,7 +134,7 @@
 
 <!-- 오류가 나면 화면 아래에 빨갛게 표시 (폰에서는 개발자 도구를 볼 수 없어서) -->
 <div id="errBox" style="position:fixed;left:8px;right:8px;bottom:8px;z-index:99;display:none;
-  background:rgba(120,0,0,0.85);color:#fff;font:12px monospace;padding:8px;border-radius:6px;white-space:pre-wrap"></div>
+  background:rgba(120,0,0,0.85);color:#fff;font:12px var(--font);padding:8px;border-radius:6px;white-space:pre-wrap"></div>
 <script>
 window.addEventListener('error', e => {
   const b = document.getElementById('errBox');
@@ -141,6 +145,7 @@ window.addEventListener('error', e => {
 <!-- 데이터 파일: 코드(index.html)와 분리
      ?v=날짜 : 데이터 파일을 바꾸면 이 날짜도 바꿔야 폰 브라우저가 옛날 파일을 캐시에서 꺼내 쓰지 않음 -->
 <script src="data/land.js?v=20261101"></script>
+<script src="data/stars.js?v=20261111"></script>
 <script src="data/bg-stars.js?v=20261101"></script>
 <script src="data/milkyway.js?v=20261101"></script>
 <script src="data/constellations.js?v=20261101"></script>
@@ -148,26 +153,27 @@ window.addEventListener('error', e => {
 <script src="data/meteor-showers.js?v=20261108"></script>
 <script>
 // =====================
-// 0. 테스트 모드 (true: 태양/달/행성을 임시 위치에 고정, false: 실제 위치)
-// push 전에 반드시 false로!
+// 별 어디있니 — 지금 내 위치에서 별·행성·은하·유성우가 하늘 어디에 있는지 보여주는 웹앱
+//
+// 코드 구성 (이 파일 하나 + data 폴더의 데이터 파일들)
+//  0. 디버그 설정          5. 천체 좌표 계산 (태양·달·행성·적경적위→고도방위각)
+//  1. 캔버스 준비          6. 화면 좌표 계산
+//  2. 별 데이터 정리       7. 그리기 (은하수·별·별자리·딥스카이·유성우·태양·달·지구·낮밤)
+//  3. 센서 / GPS 상태      8. 메인 루프
+//  4. 시작 버튼 · 조작(드래그, 탭, 모드 버튼, 센서)
 // =====================
-const TEST_MODE = false;
 
-// 탭 범위 확인용: true면 각 천체의 탭 인정 범위(점선 원)와 마지막으로 탭한 지점(빨간 점)을 보여줌
-// 범위 조절이 끝나면 false로!
-const DEBUG_TAP = false;
+// =====================
+// 0. 디버그 설정
+// 주소 뒤에 ?debug 를 붙여 열면 켜짐 (예: .../star_search/?debug)
+// 켜지면: 탭 인정 범위(노란 점선)와 마지막 탭 지점(빨간 점), fps, 센서 원본 값 표시
+// 코드를 고치지 않고 폰에서 바로 확인할 수 있게 주소로 켜고 끔
+// =====================
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
-const TEST_POS = {
-  sun:     { alt: 60, az: 90 },
-  moon:    { alt: 40, az: 90 },
-  mercury: { alt: 25, az: 45 },
-  venus:   { alt: 25, az: 60 },
-  mars:    { alt: 25, az: 75 },
-  jupiter: { alt: 25, az: 105 },
-  saturn:  { alt: 25, az: 120 },
-  uranus:  { alt: 25, az: 135 },
-  neptune: { alt: 25, az: 150 },
-};
+// 캔버스에 쓰는 글꼴 (CSS의 --font와 같게)
+const CANVAS_FONT = '"Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", sans-serif';
+const font = (px, weight = 500) => `${weight} ${px}px ${CANVAS_FONT}`;
 
 // =====================
 // 1. 캔버스 준비
@@ -185,106 +191,8 @@ window.addEventListener('resize', resize);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 
 // =====================
-// 2. 실제 별 데이터: 이름 있는 2.5등급 이하 별 + 북두칠성/카시오페이아 보충 (J2000, RA/Dec 단위: 도)
-// 출처: d3-celestial 패키지의 Hipparcos 기반 목록. ko: 한국에서 따로 부르는 이름
-// RA: 적경(0~360), Dec: 적위(-90~90), mag: 등급(작을수록 밝음)
+// 2. 별 데이터: data/stars.js (이름 있는 밝은 별), data/bg-stars.js (배경 별)
 // =====================
-const STARS = [
-  { name: "Sirius",            ra:  101.287, dec:  -16.716, mag: -1.44 },
-  { name: "Canopus",           ra:   95.988, dec:  -52.696, mag: -0.62 },
-  { name: "Arcturus",          ra:  213.915, dec:   19.182, mag: -0.05 },
-  { name: "Rigil Kentaurus",   ra:  219.902, dec:  -60.834, mag: -0.01 },
-  { name: "Vega",              ra:  279.235, dec:   38.784, mag:  0.03, ko: "직녀성" },
-  { name: "Capella",           ra:   79.172, dec:   45.998, mag:  0.08 },
-  { name: "Rigel",             ra:   78.635, dec:   -8.202, mag:  0.18 },
-  { name: "Procyon",           ra:  114.826, dec:    5.225, mag:  0.40 },
-  { name: "Achernar",          ra:   24.428, dec:  -57.237, mag:  0.45 },
-  { name: "Betelgeuse",        ra:   88.793, dec:    7.407, mag:  0.45 },
-  { name: "Hadar",             ra:  210.956, dec:  -60.373, mag:  0.61 },
-  { name: "Altair",            ra:  297.696, dec:    8.868, mag:  0.76, ko: "견우성" },
-  { name: "Acrux",             ra:  186.650, dec:  -63.099, mag:  0.77 },
-  { name: "Aldebaran",         ra:   68.980, dec:   16.509, mag:  0.87 },
-  { name: "Spica",             ra:  201.298, dec:  -11.161, mag:  0.98 },
-  { name: "Antares",           ra:  247.352, dec:  -26.432, mag:  1.06 },
-  { name: "Pollux",            ra:  116.329, dec:   28.026, mag:  1.16 },
-  { name: "Fomalhaut",         ra:  344.413, dec:  -29.622, mag:  1.17 },
-  { name: "Deneb",             ra:  310.358, dec:   45.280, mag:  1.25 },
-  { name: "Mimosa",            ra:  191.930, dec:  -59.689, mag:  1.25 },
-  { name: "Toliman",           ra:  219.896, dec:  -60.837, mag:  1.35 },
-  { name: "Regulus",           ra:  152.093, dec:   11.967, mag:  1.36 },
-  { name: "Adhara",            ra:  104.656, dec:  -28.972, mag:  1.50 },
-  { name: "Castor",            ra:  113.649, dec:   31.888, mag:  1.58 },
-  { name: "Gacrux",            ra:  187.792, dec:  -57.113, mag:  1.59 },
-  { name: "Shaula",            ra:  263.402, dec:  -37.104, mag:  1.62 },
-  { name: "Bellatrix",         ra:   81.283, dec:    6.350, mag:  1.64 },
-  { name: "Elnath",            ra:   81.573, dec:   28.608, mag:  1.65 },
-  { name: "Miaplacidus",       ra:  138.300, dec:  -69.717, mag:  1.67 },
-  { name: "Alnilam",           ra:   84.053, dec:   -1.202, mag:  1.69 },
-  { name: "Alnair",            ra:  332.058, dec:  -46.961, mag:  1.73 },
-  { name: "Alnitak",           ra:   85.190, dec:   -1.943, mag:  1.74 },
-  { name: "Regor",             ra:  122.383, dec:  -47.337, mag:  1.75 },
-  { name: "Alioth",            ra:  193.507, dec:   55.960, mag:  1.76 },
-  { name: "Kaus Australis",    ra:  276.043, dec:  -34.385, mag:  1.79 },
-  { name: "Mirfak",            ra:   51.081, dec:   49.861, mag:  1.79 },
-  { name: "Dubhe",             ra:  165.932, dec:   61.751, mag:  1.81 },
-  { name: "Wezen",             ra:  107.098, dec:  -26.393, mag:  1.83 },
-  { name: "Alkaid",            ra:  206.885, dec:   49.313, mag:  1.85 },
-  { name: "Avior",             ra:  125.629, dec:  -59.510, mag:  1.86 },
-  { name: "Sargas",            ra:  264.330, dec:  -42.998, mag:  1.86 },
-  { name: "Menkalinan",        ra:   89.882, dec:   44.947, mag:  1.90 },
-  { name: "Atria",             ra:  252.166, dec:  -69.028, mag:  1.91 },
-  { name: "Alhena",            ra:   99.428, dec:   16.399, mag:  1.93 },
-  { name: "Alsephina",         ra:  131.176, dec:  -54.709, mag:  1.93 },
-  { name: "Peacock",           ra:  306.412, dec:  -56.735, mag:  1.94 },
-  { name: "Polaris",           ra:   37.955, dec:   89.264, mag:  1.97, ko: "북극성" },
-  { name: "Mirzam",            ra:   95.675, dec:  -17.956, mag:  1.98 },
-  { name: "Alphard",           ra:  141.897, dec:   -8.659, mag:  1.99 },
-  { name: "Algieba",           ra:  154.993, dec:   19.841, mag:  2.01 },
-  { name: "Hamal",             ra:   31.793, dec:   23.462, mag:  2.01 },
-  { name: "Diphda",            ra:   10.897, dec:  -17.987, mag:  2.04 },
-  { name: "Nunki",             ra:  283.816, dec:  -26.297, mag:  2.05 },
-  { name: "Menkent",           ra:  211.671, dec:  -36.370, mag:  2.06 },
-  { name: "Alpheratz",         ra:    2.097, dec:   29.090, mag:  2.07 },
-  { name: "Kochab",            ra:  222.676, dec:   74.156, mag:  2.07 },
-  { name: "Mirach",            ra:   17.433, dec:   35.621, mag:  2.07 },
-  { name: "Saiph",             ra:   86.939, dec:   -9.670, mag:  2.07 },
-  { name: "Tiaki",             ra:  340.667, dec:  -46.885, mag:  2.07 },
-  { name: "Rasalhague",        ra:  263.734, dec:   12.560, mag:  2.08 },
-  { name: "Algol",             ra:   47.042, dec:   40.956, mag:  2.09 },
-  { name: "Almach",            ra:   30.975, dec:   42.330, mag:  2.10 },
-  { name: "Denebola",          ra:  177.265, dec:   14.572, mag:  2.14 },
-  { name: "Navi",              ra:   14.177, dec:   60.717, mag:  2.15 },
-  { name: "Muhlifain",         ra:  190.379, dec:  -48.960, mag:  2.20 },
-  { name: "Aspidiske",         ra:  139.273, dec:  -59.275, mag:  2.21 },
-  { name: "Naos",              ra:  120.896, dec:  -40.003, mag:  2.21 },
-  { name: "Alphecca",          ra:  233.672, dec:   26.715, mag:  2.22 },
-  { name: "Mizar",             ra:  200.981, dec:   54.925, mag:  2.23 },
-  { name: "Sadr",              ra:  305.557, dec:   40.257, mag:  2.23 },
-  { name: "Suhail",            ra:  136.999, dec:  -43.433, mag:  2.23 },
-  { name: "Eltanin",           ra:  269.151, dec:   51.489, mag:  2.24 },
-  { name: "Shedar",            ra:   10.127, dec:   56.537, mag:  2.24 },
-  { name: "Mintaka",           ra:   83.002, dec:   -0.299, mag:  2.25 },
-  { name: "Caph",              ra:    2.295, dec:   59.150, mag:  2.28 },
-  { name: "Dschubba",          ra:  240.083, dec:  -22.622, mag:  2.29 },
-  { name: "Larawag",           ra:  252.541, dec:  -34.293, mag:  2.29 },
-  { name: "Men",               ra:  220.482, dec:  -47.388, mag:  2.30 },
-  { name: "Merak",             ra:  165.460, dec:   56.382, mag:  2.34 },
-  { name: "Izar",              ra:  221.247, dec:   27.074, mag:  2.35 },
-  { name: "Enif",              ra:  326.046, dec:    9.875, mag:  2.38 },
-  { name: "Mula",              ra:  265.622, dec:  -39.030, mag:  2.39 },
-  { name: "Ankaa",             ra:    6.571, dec:  -42.306, mag:  2.40 },
-  { name: "Phecda",            ra:  178.458, dec:   53.695, mag:  2.41 },
-  { name: "Sabik",             ra:  257.594, dec:  -15.725, mag:  2.43 },
-  { name: "Scheat",            ra:  345.944, dec:   28.083, mag:  2.44 },
-  { name: "Alderamin",         ra:  319.645, dec:   62.586, mag:  2.45 },
-  { name: "Aludra",            ra:  111.024, dec:  -29.303, mag:  2.45 },
-  { name: "Markeb",            ra:  140.528, dec:  -55.011, mag:  2.47 },
-  { name: "Aljanah",           ra:  311.553, dec:   33.970, mag:  2.48 },
-  { name: "Markab",            ra:  346.190, dec:   15.205, mag:  2.49 },
-  { name: "Ruchbah",           ra:   21.454, dec:   60.235, mag:  2.66 },
-  { name: "Megrez",            ra:  183.857, dec:   57.033, mag:  3.32 },
-  { name: "Segin",             ra:   28.599, dec:   63.670, mag:  3.35 },
-];
 
 // =====================
 // 3. 센서 / GPS 상태
@@ -336,9 +244,7 @@ let sensorEl = null;        // 센서가 알려준 최신 고도 (PC는 null)
 let lastX = null, lastY = null, dragDX = 0, dragDY = 0;
 // 이 거리(px) 이하로 움직이면 '탭', 넘으면 '드래그' (손떨림 감안)
 const TAP_SLOP = 12;
-// 손가락 미세 보정 (px, 양수 = 왼쪽/위로 당김). 기본은 0
-// 예전엔 {14, -30}으로 맞췄지만, 어긋남의 진짜 원인은 모바일 주소창 때문에 화면 기준점이 움직이는 것이었음
-// → 이제 탭할 때마다 캔버스 실제 위치를 재서 계산하므로 고정 보정은 필요 없음
+// 손가락 미세 보정 (px, 양수 = 왼쪽/위로 당김). 탭 위치는 canvasPoint()로 정확히 계산하므로 기본 0
 const TOUCH_OFFSET = { x: 0, y: 0 };
 
 // 화면 좌표(clientX/Y) → 캔버스 좌표: 캔버스가 실제로 화면 어디에 어떤 크기로 있는지 매번 측정
@@ -403,7 +309,7 @@ let selected = null;   // { name, kind, desc, getPos, stack: 겹친 천체 이�
 // 1) 몸체 위를 정확히 탭했으면 그 천체가 최우선
 // 2) 아니면 탭 지점에서 가장 가까운 천체
 // 3) 후보가 여럿이면 같은 자리를 다시 탭할 때마다 다음 후보로 넘어감
-let lastTap = null;   // DEBUG_TAP용: 마지막 탭 위치
+let lastTap = null;   // 디버그 표시용: 마지막 탭 위치
 
 // 겹친 천체 목록 고정: 처음 탭한 자리의 목록을 저장해두고,
 // 그 근처(STACK_RADIUS 안)를 다시 누르면 손가락 위치가 조금 달라도 저장한 순서대로 넘어감
@@ -540,7 +446,7 @@ function applySensor() {
 const DIRS = ['북','북동','동','남동','남','남서','서','북서'];
 const dirName = az => DIRS[Math.round(normAz(az) / 45) % 8];
 
-// 초당 프레임 수 (DEBUG_TAP일 때 화면에 표시): 실제 폰에서 성능 확인용
+// 초당 프레임 수 (DEBUG일 때 화면에 표시): 실제 폰에서 성능 확인용
 let fps = 0, fpsFrames = 0, fpsStart = performance.now();
 function countFps() {
   fpsFrames++;
@@ -550,11 +456,11 @@ function countFps() {
 
 function updateHud() {
   countFps();
-  // 센서 원본 값 (DEBUG_TAP일 때만): alpha/beta/gamma = 폰 회전, heading = 나침반, acc = 나침반 오차(도)
+  // 센서 원본 값 (DEBUG일 때만): alpha/beta/gamma = 폰 회전, heading = 나침반, acc = 나침반 오차(도)
   const sd = document.getElementById('sensorDebug');
-  if (DEBUG_TAP && !rawSensor) {
+  if (DEBUG && !rawSensor) {
     sd.textContent = `${fps} fps`;
-  } else if (DEBUG_TAP && rawSensor) {
+  } else if (DEBUG && rawSensor) {
     const f = v => (v === undefined || v === null) ? '-' : Math.round(v);
     sd.textContent = `${fps} fps\nα ${f(rawSensor.a)}  β ${f(rawSensor.b)}  γ ${f(rawSensor.g)}\nheading ${f(rawSensor.h)}  오차 ±${f(rawSensor.acc)}°`;
   } else {
@@ -703,8 +609,8 @@ function getPlanetPosition(name, lat, lon) {
   return raDecToAltAz(ra, dec, lat, lon);
 }
 
-// 달 위상 계산 (정확한 신월 기준점 사용)
-// 기준: 2000년 1월 6일 18:14 UTC = JD 2451549.26 (알려진 신월)
+// 달 위상 계산: 기준 신월로부터 지난 날 수 ÷ 평균 삭망월(29.53일)
+// 기준값 JD 2451549.26은 2000년 1월 신월 근처의 근사 기준점 (실제 달과 대조해 맞춘 값)
 function getMoonPhase(jd = getJulianDate()) {
   const knownNewMoon = 2451549.26;
   const daysSince = jd - knownNewMoon;
@@ -902,7 +808,7 @@ function drawPlanetFlat(px, py, r, color, glowColor, label, ring = false) {
   if (ring) drawRing(0, Math.PI);           // 고리 앞쪽 절반
 
   ctx.fillStyle = 'rgba(180,220,255,0.7)';
-  ctx.font = '12px monospace';
+  ctx.font = font(12);
   ctx.textAlign = 'center';
   ctx.fillText(label, px, py + r + 18);
 }
@@ -942,14 +848,14 @@ function drawEarthPanel() {
   ctx.stroke();
 
   if (onHorizon > 0.05) {
-    ctx.font = '10px monospace';
+    ctx.font = font(10);
     ctx.textAlign = 'left';
     ctx.fillStyle = `rgba(180,225,255,${0.7 * onHorizon})`;
     ctx.fillText('지평선', 16, top + 14);
   }
 
   // 방위 표시: 경계선 바로 위, 지금 보는 방향에 맞춰 좌우로만 이동
-  ctx.font = '13px monospace';
+  ctx.font = font(13);
   ctx.textAlign = 'center';
   [['북', 0], ['북동', 45], ['동', 90], ['남동', 135], ['남', 180], ['남서', 225], ['서', 270], ['북서', 315]].forEach(([label, az]) => {
     const { px } = celestialToScreen(az, 0, azimuth, elevation);
@@ -957,7 +863,7 @@ function drawEarthPanel() {
     const main = label.length === 1;
     ctx.fillStyle = label === '북' ? 'rgba(255,122,107,0.9)'
                   : main ? 'rgba(180,220,255,0.6)' : 'rgba(180,220,255,0.3)';
-    ctx.font = main ? '13px monospace' : '10px monospace';
+    ctx.font = main ? font(13, 700) : font(10.5, 500);
     ctx.fillText(label, px, top - 10);
   });
 }
@@ -1106,7 +1012,7 @@ function drawGlobe() {
   ctx.fillStyle = '#ff7a6b';
   ctx.fill();
   ctx.fillStyle = 'rgba(220,240,255,0.85)';
-  ctx.font = '11px monospace';
+  ctx.font = font(11);
   ctx.textAlign = 'center';
   ctx.shadowColor = 'rgba(0,10,25,0.9)';
   ctx.shadowBlur = 4;
@@ -1321,7 +1227,7 @@ function drawConstellations() {
     const { alt, az } = raDecToAltAz(c.label[0], c.label[1], userLat, userLon);
     if (alt < 0) return;
     const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
-    ctx.font = c.rank === 1 ? '12px monospace' : '10px monospace';
+    ctx.font = c.rank === 1 ? font(12, 500) : font(10.5, 500);
     ctx.textAlign = 'center';
     ctx.fillStyle = c.rank === 1 ? 'rgba(160,200,255,0.6)' : 'rgba(160,200,255,0.4)';
     ctx.fillText(c.ko, px, py);
@@ -1387,7 +1293,7 @@ function drawDeepSky() {
     const { px, py } = celestialToScreen(az, alt, azimuth, elevation);
     if (px < -30 || px > canvas.width + 30 || py < -30 || py > canvas.height + 30) return;
     drawDsoIcon(o.cat, px, py);
-    ctx.font = '10px monospace';
+    ctx.font = font(10);
     ctx.textAlign = 'center';
     ctx.fillStyle = `rgba(${DSO_COLOR[o.cat]},0.75)`;
     ctx.fillText(o.ko.replace(/ \(.*\)/, ''), px, py + 22);
@@ -1524,7 +1430,7 @@ function drawMeteorRadiants() {
     ctx.fill();
     ctx.restore();
 
-    ctx.font = '10px monospace';
+    ctx.font = font(10);
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,225,150,0.8)';
     ctx.fillText(sh.ko, px, py + 40);
@@ -1653,7 +1559,6 @@ function draw() {
 
   // 태양 위치로 낮/밤 판단 → 하늘 배경
   const sun = getSunPosition(userLat, userLon);
-  if (TEST_MODE) { sun.alt = TEST_POS.sun.alt; sun.az = TEST_POS.sun.az; }
   updateSky(sun.alt);
   drawSkyBackground(sun.alt);
 
@@ -1700,7 +1605,6 @@ function draw() {
   // 행성 그리기 (금성은 아주 밝아서 낮에도 희미하게 보임)
   PLANET_STYLE.forEach(pl => {
     const pos = getPlanetPosition(pl.key, userLat, userLon);
-    if (TEST_MODE) { pos.alt = TEST_POS[pl.key].alt; pos.az = TEST_POS[pl.key].az; }
     if (pos.alt < -10) return;
     const { px, py } = celestialToScreen(pos.az, pos.alt, azimuth, elevation);
     if (px < -50 || px > canvas.width + 50 || py < -50 || py > canvas.height + 50) return;
@@ -1711,7 +1615,7 @@ function draw() {
     ctx.globalAlpha = 1;
     if (pos.alt > 0) hitTargets.push({ vis,
       name: pl.label, kind: '행성', px, py, hitR: Math.max(22, pl.r * 3.5), coreR: pl.r + 6, ringR: Math.max(22, pl.r * 3.5),
-      getPos: () => TEST_MODE ? { ...TEST_POS[pl.key] } : getPlanetPosition(pl.key, userLat, userLon),
+      getPos: () => getPlanetPosition(pl.key, userLat, userLon),
     });
   });
 
@@ -1722,14 +1626,13 @@ function draw() {
       drawSunFlat(px, py);
       if (sun.alt > 0) hitTargets.push({
         name: '태양', kind: '항성', px, py, hitR: 55, coreR: 30, ringR: 55,
-        getPos: () => TEST_MODE ? { ...TEST_POS.sun } : getSunPosition(userLat, userLon),
+        getPos: () => getSunPosition(userLat, userLon),
       });
     }
   }
 
   // 달 그리기
   const moon = getMoonPosition(userLat, userLon);
-  if (TEST_MODE) { moon.alt = TEST_POS.moon.alt; moon.az = TEST_POS.moon.az; }
   if (moon.alt > -10) {
     const { px, py } = celestialToScreen(moon.az, moon.alt, azimuth, elevation);
     if (px > -100 && px < canvas.width + 100 && py > -100 && py < canvas.height + 100) {
@@ -1737,7 +1640,7 @@ function draw() {
       drawMoonFlat(px, py, 30, illumination, waning);
       if (moon.alt > 0) hitTargets.push({
         name: '달', kind: '위성', px, py, hitR: 45, coreR: 30, ringR: 45,
-        getPos: () => TEST_MODE ? { ...TEST_POS.moon } : getMoonPosition(userLat, userLon),
+        getPos: () => getMoonPosition(userLat, userLon),
       });
     }
   }
@@ -1745,7 +1648,7 @@ function draw() {
   // 지구 영역은 맨 마지막에: 화면 아래 20%에 고정, 뒤의 천체를 가림
   drawEarthPanel();
   drawSelection();
-  if (DEBUG_TAP) drawTapDebug();
+  if (DEBUG) drawTapDebug();
 
   requestAnimationFrame(draw);
 }
