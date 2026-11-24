@@ -787,8 +787,9 @@ function drawMoonFlat(px, py, r, illumination, waning) {
     ctx.beginPath();
     if (!waning) {
       ctx.arc(px, py, r, Math.PI / 2, -Math.PI / 2, false);
+      // 그림자 경계(타원): 초승달(ex>0)이면 오른쪽으로 휘어 그림자가 커지고, 볼록한 달(ex<0)이면 왼쪽으로 휘어 그림자가 작아짐
       const ex = r * (1 - 2 * illumination);
-      ctx.ellipse(px, py, Math.abs(ex), r, 0, -Math.PI / 2, Math.PI / 2, ex > 0);
+      ctx.ellipse(px, py, Math.abs(ex), r, 0, -Math.PI / 2, Math.PI / 2, ex < 0);
     } else {
       ctx.arc(px, py, r, -Math.PI / 2, Math.PI / 2, false);
       const ex = r * (2 * illumination - 1);
